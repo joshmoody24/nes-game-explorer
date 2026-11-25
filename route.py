@@ -105,8 +105,10 @@ def main():
     parser.add_argument("--attempts", type=int, default=200)
     parser.add_argument("--spacings", default="60,40,20,10")
     parser.add_argument("--resume", action="store_true", help="shorten the saved route instead of stitching anew")
+    parser.add_argument("--attempt-player", default="learned", help="who makes the attempts: learned or random")
+    parser.add_argument("--name", default="", help="suffix for the saved route and video")
     args = parser.parse_args()
-    saved_route = Path("cache") / f"route-{args.run}-{args.target}.pkl"
+    saved_route = Path("cache") / f"route-{args.run}-{args.target}{args.name}.pkl"
 
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     states = route(emulator, args.run, args.target)
@@ -120,19 +122,20 @@ def main():
         print(f"shortening the saved {len(actions)}-step route", flush=True)
     else:
         start = states[0]
-        actions = stitch(emulator, start, [emulator.memory(s) for s in states[1:]], player, attempts=args.attempts)
+        actions = stitch(emulator, start, [emulator.memory(s) for s in states[1:]], player, attempts=args.attempts,
+                         player=args.attempt_player)
         if actions is None:
             return
         print(f"stitched a path of {len(actions)} steps through {len(states) - 1} archive waypoints", flush=True)
     actions = shorten(emulator, start, actions, player, spacings=[int(s) for s in args.spacings.split(",")],
-                      attempts=args.attempts)
+                      attempts=args.attempts, player=args.attempt_player)
     end = emulator.memory(replay(emulator, start, actions)[-1])
     print(f"final path: {len(actions)} steps; replayed, it ends with the target: {bool(TARGETS[args.target](end))}",
           flush=True)
     Path("cache").mkdir(exist_ok=True)
     saved_route.write_bytes(pickle.dumps((start, actions)))
     Path("videos").mkdir(exist_ok=True)
-    video.record(emulator, start, actions, Path("videos") / f"route-{args.target}.mp4")
+    video.record(emulator, start, actions, Path("videos") / f"route-{args.target}{args.name}.mp4")
 
 
 if __name__ == "__main__":

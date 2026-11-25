@@ -43,16 +43,17 @@ class Settings:
     # Hand-given knowledge, for diagnosis: split places by energy band, so healthy and nearly dead versions
     # of the same spot are kept separately.
     health_buckets: bool = False
-    # Which state a place keeps: "first" (the first one seen); "empowerment" (the state from which my
+    # Which state a place keeps, by score (ties go to the shorter button path from the start): "shortest"
+    # (score 0, so purely the shortest path); "empowerment" (the state from which my
     # actions change the most memory bits, see empowerment.py); "rare-empowerment" (the same, with each
     # bit weighted by how rarely it is changeable, so scarce abilities like ammo count most); "safety" (the
     # state from which random play least often ends with my buttons doing nothing, i.e. furthest from
     # death); or, as a hand-given diagnostic, "more-missiles" / "more-health" (whenever a visit arrives with more missiles / energy).
-    keep: str = "first"
+    keep: str = "shortest"
 
     def __post_init__(self):
         # Catches typos in flags, which would otherwise silently fall back to the default behavior.
-        assert self.keep in ("first", "empowerment", "rare-empowerment", "safety", "more-missiles", "more-health"), f"unknown keep {self.keep!r}"
+        assert self.keep in ("shortest", "empowerment", "rare-empowerment", "safety", "more-missiles", "more-health"), f"unknown keep {self.keep!r}"
         assert self.selection in ("least-chosen", "productive", "powerful"), f"unknown selection {self.selection!r}"
 
 
@@ -111,8 +112,8 @@ class Empowerment:
 
 @dataclass
 class Segment:
-    """What one stretch of random buttons found: {place: (state, score)} for places that were new, or
-    reached with a better score than the kept state's when the segment started."""
+    """What one stretch of random buttons found: {place: (state, score, steps into the segment)} for places
+    that were new, or reached with a better rank (see rank) than the kept state's when the segment started."""
     start: int  # archive index it started from
     found: dict
     progress: Progress
@@ -131,7 +132,13 @@ def replay_scorer(settings):
     return None
 
 
-def explore(emulator, rng, settings, known, start, start_state, replay_score=None):
+def rank(score, path_length):
+    """How a place's candidate states compare: higher score first, then the shorter path from the start."""
+    return score, -path_length
+
+
+def explore(emulator, rng, settings, known, start, start_state, start_path_length, replay_score=None):
+    """known: {place: rank of the kept state}."""
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
     action = rng.integers(len(ACTIONS))
@@ -150,12 +157,14 @@ def explore(emulator, rng, settings, known, start, start_state, replay_score=Non
         place = hand_made_place(memory, settings)
         new = place not in known and place not in found
         state_score = score(memory, settings)
-        if new or state_score > max(known.get(place, -1), found.get(place, (None, -1))[1]):
-            found[place] = (state, state_score)
+        candidate = rank(state_score, start_path_length + step + 1)
+        best_so_far = max(known.get(place, (-np.inf, 0)), rank(*found[place][1:]) if place in found else (-np.inf, 0))
+        if new or candidate > best_so_far:
+            found[place] = (state, state_score, start_path_length + step + 1)
         if place in known:
             revisits += 1
             if rng.random() < 1 / revisits:
-                revisit = (place, state)
+                revisit = (place, state, start_path_length + step + 1)
         if new:
             gaps.append(stale + 1)
             stale = 0
@@ -166,12 +175,13 @@ def explore(emulator, rng, settings, known, start, start_state, replay_score=Non
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
     if replay_score:
-        found = {place: (state, replay_score(emulator, rng, state)) for place, (state, _) in found.items()}
+        found = {place: (state, replay_score(emulator, rng, state), length)
+                 for place, (state, _, length) in found.items()}
         if revisit:
-            place, state = revisit
+            place, state, length = revisit
             state_score = replay_score(emulator, rng, state)
-            if state_score > known[place]:
-                found[place] = (state, state_score)
+            if rank(state_score, length) > known[place]:
+                found[place] = (state, state_score, length)
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state))
 
 
@@ -181,9 +191,9 @@ def worker(connection, settings, seed):
     known = {}
     replay_score = replay_scorer(settings)
     while (task := connection.recv()) is not None:
-        start, start_state, updates = task
+        start, start_state, start_path_length, updates = task
         known.update(updates)
-        connection.send(explore(emulator, rng, settings, known, start, start_state, replay_score))
+        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length, replay_score))
 
 
 class Explorers:
@@ -198,9 +208,10 @@ class Explorers:
         self._updates_sent = [0] * count
         self.count = count
 
-    def send(self, worker_index, start, start_state, updates):
-        """updates is the main process's full, append-only log of (place, score) updates."""
-        self._connections[worker_index].send((start, start_state, updates[self._updates_sent[worker_index]:]))
+    def send(self, worker_index, start, start_state, start_path_length, updates):
+        """updates is the main process's full, append-only log of (place, rank) updates."""
+        self._connections[worker_index].send((start, start_state, start_path_length,
+                                              updates[self._updates_sent[worker_index]:]))
         self._updates_sent[worker_index] = len(updates)
 
     def finished(self):

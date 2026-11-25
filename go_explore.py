@@ -21,11 +21,12 @@ from pathlib import Path
 import numpy as np
 
 from emulator import Emulator
-from explorers import ROM, Explorers, Settings, hand_made_place, score
+from explorers import ROM, Explorers, Settings, hand_made_place, rank, score
 from metroid import start_game
 from progress import Progress
 
 RUNS = Path("runs")
+UNKNOWN_PATH_LENGTH = 10**9  # ranks a resumed place, whose path is unknown, below any place with one
 MAX_RUNS_GIGABYTES = 50
 LOG_EVERY_SECONDS = 2
 CHECKPOINT_EVERY_SECONDS = 300
@@ -40,17 +41,28 @@ class Archive:
     times_chosen: list = field(default_factory=list)
     discoveries: list = field(default_factory=list)  # new places found by segments started here
     parents: list = field(default_factory=list)  # archive index of the place whose segment found this one (-1: start)
+    # Buttons (indices into ACTIONS) from the start state to the kept state: every place has a replayable
+    # route. None for places resumed from an older run, which didn't keep paths.
+    paths: list = field(default_factory=list)
     index: dict = field(default_factory=dict)  # place -> position in the lists above
-    updates: list = field(default_factory=list)  # append-only (place, score) log that workers sync from
+    updates: list = field(default_factory=list)  # append-only (place, rank) log that workers sync from
 
-    def offer(self, place, state, score, parent=-1):
-        """Keeps state if place is new or score beats the kept state's. Returns "new", "improved" or None."""
+    def path_length(self, i):
+        return UNKNOWN_PATH_LENGTH if self.paths[i] is None else len(self.paths[i])
+
+    def offer(self, place, state, score, parent=-1, path=None):
+        """
+        Keeps state if place is new or it ranks above the kept state (higher score, or equal score and a
+        shorter path). Returns "new", "improved" (higher score), "shorter" or None.
+        """
+        length = UNKNOWN_PATH_LENGTH if path is None else len(path)
         if place in self.index:
             i = self.index[place]
-            if score > self.scores[i]:
-                self.states[i], self.scores[i] = state, score
-                self.updates.append((place, score))
-                return "improved"
+            if rank(score, length) > rank(self.scores[i], self.path_length(i)):
+                outcome = "improved" if score > self.scores[i] else "shorter"
+                self.states[i], self.scores[i], self.paths[i] = state, score, path
+                self.updates.append((place, rank(score, length)))
+                return outcome
             return None
         self.index[place] = len(self.places)
         self.places.append(place)
@@ -59,7 +71,8 @@ class Archive:
         self.times_chosen.append(0)
         self.discoveries.append(0)
         self.parents.append(parent)
-        self.updates.append((place, score))
+        self.paths.append(path)
+        self.updates.append((place, rank(score, length)))
         return "new"
 
     def choose(self, rng):
@@ -181,12 +194,12 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = start_game(emulator)
     if args.resume:
-        assert settings.keep in ("first", "more-missiles"), "resuming would mean replay-scoring every saved state"
+        assert settings.keep in ("shortest", "more-missiles"), "resuming would mean replay-scoring every saved state"
         archive = resumed_archive(args.resume, settings, emulator)
     else:
         archive = Archive(settings.selection)
         memory = emulator.view(start)
-        archive.offer(hand_made_place(memory, settings), start, score(memory, settings))
+        archive.offer(hand_made_place(memory, settings), start, score(memory, settings), path=b"")
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0
@@ -195,9 +208,14 @@ def main():
     recordings = Recordings()
     explorers = Explorers(args.workers, settings, args.seed)
 
+    # The path to each worker's start state, as it was when assigned: the archive may replace that state
+    # (with a shorter path) while the worker explores from it.
+    start_paths = [None] * explorers.count
+
     def assign(worker_index):
         index = archive.choose(rng)
-        explorers.send(worker_index, index, archive.states[index], archive.updates)
+        start_paths[worker_index] = archive.paths[index]
+        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates)
 
     for worker_index in range(explorers.count):
         assign(worker_index)
@@ -211,8 +229,10 @@ def main():
                 frames += segment.frames
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
-                outcomes = [archive.offer(place, state, state_score, segment.start)
-                            for place, (state, state_score) in segment.found.items()]
+                start_path = start_paths[worker_index]
+                outcomes = [archive.offer(place, state, state_score, segment.start,
+                                          None if start_path is None else start_path + segment.actions[:length - len(start_path)])
+                            for place, (state, state_score, length) in segment.found.items()]
                 new_places = outcomes.count("new")
                 # A stronger state for a known place (healed, rearmed) counts as progress, like a new place.
                 archive.discoveries[segment.start] += new_places + outcomes.count("improved")
