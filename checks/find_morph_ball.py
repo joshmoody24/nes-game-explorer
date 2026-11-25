@@ -8,13 +8,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from emulator import Emulator, button_mask
+from metroid import ITEMS, at, start_game
 
-ITEMS = 0x6878 - 0x6000 + 0x800
 emulator = Emulator(os.environ["QUICKNES_CORE"], "roms/metroid.nes")
-emulator.run(frames=3000)
-for _ in range(4):
-    emulator.run(button_mask("START"), frames=5)
-    emulator.run(frames=120)
+start_game(emulator)
 for _ in range(40):
     emulator.run(button_mask("LEFT"), 4)
 start = emulator.save()
@@ -27,8 +24,8 @@ for attempt in range(3000):
     for step in range(150):
         emulator.run(choices[rng.choice(len(choices), p=[0.35, 0.3, 0.1, 0.1, 0.1, 0.05])], 4)
         memory = emulator.memory()
-        if memory[ITEMS]:
-            print(f"items byte became {hex(memory[ITEMS])} on attempt {attempt}, step {step} "
+        if memory[at(ITEMS)]:
+            print(f"items byte became {hex(memory[at(ITEMS)])} on attempt {attempt}, step {step} "
                   f"({time.perf_counter() - started:.0f}s); map y,x = {memory[0x4F]},{memory[0x50]}")
             plt.imsave("/tmp/morph.png", emulator.screenshot())
             raise SystemExit

@@ -4,13 +4,11 @@ import os
 import numpy as np
 
 from emulator import Emulator, button_mask
+from metroid import start_game
 from progress import Progress
 
 emulator = Emulator(os.environ["QUICKNES_CORE"], "roms/metroid.nes")
-emulator.run(frames=3000)
-for _ in range(4):
-    emulator.run(button_mask("START"), frames=5)
-    emulator.run(frames=120)
+start_game(emulator)
 start = emulator.save()
 progress = Progress()
 rng = np.random.default_rng(0)

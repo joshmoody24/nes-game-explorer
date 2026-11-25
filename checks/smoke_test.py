@@ -1,6 +1,6 @@
 """
 Checks a core can run Metroid headless: speed, save/load round trip, and that RAM reacts to input.
-Usage: smoke_test.py <core path> <rom path>
+Usage: python -m checks.smoke_test <core path> <rom path>
 """
 
 import sys
@@ -9,6 +9,7 @@ import time
 import numpy as np
 
 from emulator import Emulator, button_mask
+from metroid import start_game
 
 
 def main():
@@ -20,10 +21,7 @@ def main():
     emulator.run(frames=3000)
     print(f"idle frames per second: {3000 / (time.perf_counter() - started):,.0f}")
 
-    for _ in range(4):
-        emulator.run(button_mask("START"), frames=5)
-        emulator.run(frames=120)
-    in_game = emulator.save()
+    in_game = start_game(emulator)
 
     rng = np.random.default_rng(0)
     inputs = rng.integers(0, 1 << 9, size=600)

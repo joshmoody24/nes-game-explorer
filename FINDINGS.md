@@ -4,7 +4,7 @@ Dated results, newest last. Each says what was measured and how to rerun it.
 
 ## 2026-11-24: emulator throughput (unit: Ryzen 9 9900X, 12 cores / 24 threads)
 
-Measured with `python benchmark.py $QUICKNES_CORE 4` (random buttons, 4 frames per action, in-game).
+Measured with `python -m checks.benchmark $QUICKNES_CORE 4` (random buttons, 4 frames per action, in-game).
 
 | setup | 1 process | best total |
 |---|---|---|
@@ -15,7 +15,7 @@ Measured with `python benchmark.py $QUICKNES_CORE 4` (random buttons, 4 frames p
 
 - Python callbacks were only ~6% of the time; the core's own per-frame pixel conversion was ~35%.
 - Telling the core video is off (`RETRO_ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE`) does not change game
-  behavior: RAM identical at 334 checkpoints over 20K frames of random play (`check_video_off.py`).
+  behavior: RAM identical at 334 checkpoints over 20K frames of random play (`python -m checks.check_video_off`).
   Only checked near the start of the game so far.
 - Remaining profile: 75% 6502 CPU emulation, ~12% audio synthesis the core still does.
 - Save/load state: ~1-5 us, ~21 KB per state.
@@ -27,9 +27,22 @@ Measured with `python benchmark.py $QUICKNES_CORE 4` (random buttons, 4 frames p
   block; `Emulator.memory()` returns system + cartridge RAM (10 KB) from a save state in ~2 us.
 - Verified by experiment: $001E goes 8 -> 3 when play starts; $0050 (map x) changes 3 -> 2 walking
   into the room to the left; $6878 becomes $10 (Morph Ball) when Samus touches the pedestal
-  (`find_morph_ball.py`, found by random search in 53 attempts). Other addresses in `progress.py`
+  (`python -m checks.find_morph_ball`, found by random search in 53 attempts). Other addresses in `progress.py`
   are from the Data Crystal RAM map and the nmikstas disassembly, not yet verified.
 - "One-way bits" is too noisy to be a headline measure: 300 random runs from one start state flag
   ~9,800 bits, because everything the game writes once after starting looks one-way. It's kept as a
   diagnostic; watch whether it shrinks as exploration revisits places. This is also an early warning
   that the toy's sticky-bit trick may not transfer directly.
+
+## 2026-11-24: Go-Explore with hand-made places (sanity baseline)
+
+`python go_explore.py <name> --minutes 2` (18 workers; place = area, map room, Samus's 32-pixel block in
+the room, items, tanks, max missiles / 5).
+
+- Ending segments whenever $001E != 3 silently discarded every item pickup: collecting the Morph Ball
+  switches $001E to 9 (wait timer) during the fanfare. Segments now end only on game over ($001E = 4).
+  With that fix: Morph Ball within 10 s, 44 rooms after 110 s (stuck at 19 rooms from 50-90 s first).
+- Throughput inside Go-Explore: ~470K frames/s (vs ~750K raw emulation), so the explorer loop costs ~35%.
+- "Background layouts seen" keeps rising while rooms are flat (scrolling within a room makes new
+  layouts), so it can't distinguish a stall from progress; the Metroid room count can.
+- Checkpoints: ~2 KB per archived place compressed.

@@ -133,9 +133,9 @@ class Emulator:
             raise RuntimeError("Save state failed")
         return self._state_buffer.raw
 
-    def memory(self):
+    def memory(self, state=None):
         """System RAM ($0000-$07FF) followed by cartridge RAM ($6000-$7FFF), as one uint8 array."""
-        return memory_of(self.save(), self._cartridge_slice)
+        return memory_of(state or self.save(), self._cartridge_slice)
 
     def nametable(self, state=None):
         """The background tile layout (2 KB), from a save state or the current one."""

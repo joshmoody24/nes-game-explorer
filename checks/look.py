@@ -7,12 +7,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from emulator import Emulator, button_mask
+from metroid import start_game
 
 emulator = Emulator(os.environ["QUICKNES_CORE"], "roms/metroid.nes")
-emulator.run(frames=3000)
-for _ in range(4):
-    emulator.run(button_mask("START"), frames=5)
-    emulator.run(frames=120)
+start_game(emulator)
 shots = [("after START presses", emulator.screenshot())]
 emulator.run(button_mask("RIGHT"), frames=90)
 shots.append(("after 90 frames of RIGHT", emulator.screenshot()))
