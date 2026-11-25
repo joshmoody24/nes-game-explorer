@@ -297,3 +297,27 @@ actually went, and it retrains on them.
   No pipeline bug: most buttons are interchangeable at any moment, so "which button did random play
   press?" is mostly unanswerable, and imitating it yields a blurry, dithering player. Next: score actions
   by how likely they lead to the goal (contrastive goal-conditioned RL) instead of imitating random play.
+
+## 2026-11-25: the missing piece is a distance, not search depth
+
+Same 600 held-out trips (random 42%, exact replay 92%, imitation player 62%).
+- **Contrastive critic** (`critic.py`, separate state-action and goal encoders, InfoNCE, geometric futures
+  mean 16): 49%. Separate encoders can't compare state and goal byte by byte, and negatives from other
+  recordings let it win by recognizing rooms.
+- **Search player** (`trips._searched`; tries all 25 buttons held N steps in the emulator each step, keeps
+  the best outcome; uses save states, so a teacher, not a way to play; `python -m checks.search_trips_check`):
+
+  | distance used | hold 1 | hold 2 | hold 4 |
+  |---|---|---|---|
+  | memory bytes matching the goal (generic) | 58% | 58% | 60% |
+  | hand-made place distance (diagnostic) | 54% | - | **83%** (closes 92%) |
+
+  Bugs fixed on the way: the hold length set in the main process never reached worker processes (all
+  runs used the default), and ties went to the first button ("press nothing"), so a coarse distance stood
+  still (39% before random tie-breaking). With a good distance, greedy 16-frame lookahead nearly matches
+  exact replay: the bottleneck is the distance measure. Next: learn a distance (steps apart) from
+  recordings and search with it.
+- **Learned distance** (`distance.py`: same inputs as the policy, classifies the step gap into buckets
+  0/1/2-3/4-7/8-15/16-31/32-64/far; pairs 0-64 steps apart in a recording plus 25% from other recordings;
+  20K recordings, 20K updates): search with it (hold 4) reaches **71%** of trips, closing 87% of the
+  distance, vs 60% for matching bytes and 83% for the true distance. Best generic result so far.

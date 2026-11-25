@@ -24,7 +24,10 @@ class Trip:
     start: bytes  # save state
     goal: np.ndarray  # full memory snapshot to aim for
     budget: int  # steps allowed
-    player: str  # "learned", "learned-greedy", "random", or "replay"
+    # "learned", "learned-greedy", "random", "replay", or a search player that looks ahead in the emulator:
+    # "search" (judges outcomes by memory bytes matching the goal), "search-learned" (by a learned
+    # distance.Distance, passed as the policy), or "search-true-distance" (diagnostic: hand-made places)
+    player: str
     replay: tuple = ()  # buttons to press, for the "replay" player
     seed: int = 0
 
@@ -43,15 +46,43 @@ def distance(place, goal_place):
             + (abs(place[3] - goal_place[3]) + abs(place[4] - goal_place[4])) / 8)
 
 
-def _start_worker(params, byte_indices):
+def _searched(goal, judge, rng):
+    """
+    Search player: try every button for _search_hold steps from the current state and keep the best outcome:
+    judge is "bytes" (most memory bytes matching the goal), "learned" (smallest learned distance), or "true"
+    (diagnostic: smallest hand-made place distance). Uses save states: a teacher for training, not a way to play.
+    """
+    start = _emulator.save()
+    goal_place = hand_made_place(goal, Settings())
+    outcomes = []
+    for action in range(len(ACTIONS)):
+        _emulator.load(start)
+        for _ in range(_search_hold):
+            _emulator.run(ACTIONS[action], FRAMES_PER_STEP)
+        outcomes.append(_emulator.memory())
+    _emulator.load(start)
+    outcomes = np.stack(outcomes)
+    if judge == "learned":
+        scores = list(-_policy(outcomes, goal))
+    elif judge == "true":
+        scores = [-distance(hand_made_place(memory, Settings()), goal_place) for memory in outcomes]
+    else:
+        scores = list((outcomes[:, _search_bytes] == goal[_search_bytes]).sum(1))
+    # Random among ties: with a coarse distance most buttons tie, and always taking the first (no button)
+    # would mean standing still.
+    return int(rng.choice(np.flatnonzero(np.array(scores) == max(scores))))
+
+
+def _start_worker(player_class, params, byte_indices, search_hold):
     # The player runs on the CPU, one thread per worker: 18 workers must not all grab the GPU or spawn
     # full thread pools. Set before JAX is imported in this process.
     os.environ["JAX_PLATFORMS"] = "cpu"
     os.environ["XLA_FLAGS"] = "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
-    global _emulator, _policy
-    from policy import GoalPolicy
+    global _emulator, _policy, _search_bytes, _search_offsets, _search_hold
     _emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    _policy = GoalPolicy(params, byte_indices) if params is not None else None
+    _search_bytes, _search_hold = byte_indices, search_hold
+    _search_offsets = None if byte_indices is None else _emulator.state_offsets(byte_indices)
+    _policy = player_class(params, byte_indices) if player_class is not None else None
 
 
 def _run(trip):
@@ -68,6 +99,9 @@ def _run(trip):
             action = _policy.act(memory, trip.goal, rng)
         elif trip.player == "learned-greedy":
             action = _policy.act(memory, trip.goal, rng, temperature=0)
+        elif trip.player.startswith("search"):
+            judge = {"search": "bytes", "search-learned": "learned", "search-true-distance": "true"}[trip.player]
+            action = _searched(trip.goal, judge, rng)
         elif trip.player == "random":
             action = int(rng.integers(len(ACTIONS)))
         else:
@@ -84,12 +118,16 @@ def _run(trip):
     return Outcome(False, first, closest, bytes(pressed))
 
 
-def run(trips, policy=None, workers=18):
-    """Outcomes of trips, in order. policy: a GoalPolicy, needed for the learned players."""
-    params = None if policy is None else policy.host_params()
-    byte_indices = None if policy is None else policy.byte_indices
+def run(trips, policy=None, workers=18, byte_indices=None, search_hold=2):
+    """
+    Outcomes of trips, in order. policy: the learned player (e.g. policy.GoalPolicy or critic.Critic), needed
+    for the learned players; workers rebuild it from its class, parameters and byte indices. The search
+    player compares the bytes in byte_indices (or the policy's), holding each candidate for search_hold steps.
+    """
+    initargs = ((None, None, byte_indices) if policy is None
+                else (type(policy), policy.host_params(), policy.byte_indices)) + (search_hold,)
     with ProcessPoolExecutor(workers, mp_context=get_context("spawn"), initializer=_start_worker,
-                             initargs=(params, byte_indices)) as pool:
+                             initargs=initargs) as pool:
         return list(pool.map(_run, trips, chunksize=max(1, len(trips) // (workers * 8))))
 
 
