@@ -628,3 +628,10 @@ spendables.
   all exactly 14%; the energy tank bit 0x1077.0 with 0x108f-0x1090, all 55%. In layer 1 the second
   missile tank: 0x107a.1/.3 with 0x108b-0x108c, all 53% (plus noisier map/room bits). Next: define an
   event as a set of one-way bits held by exactly the same visits; each event seeds a child layer.
+- **Events** (`events.py`: one-way bits the layer start lacks, grouped by exactly which visits hold them):
+  layer 2 -> 10 events; **Bombs** = 6 bits (items byte + 2 bytes of the game's taken-items record, 14%),
+  **energy tank** = 6 bits (tanks + record, 55%), and an 8-bit event at 14% whose first holder lacks Bombs
+  (likely the red door before Bombs recorded as opened). Layer 1 -> 19 events; the second missile tank is
+  the 3rd largest (capacity + record, 53%); the two larger ones are map/room-state bits (one-way only within
+  the run). Plan: every event seeds a child layer from its best holder; noise events become branches that
+  stall.
