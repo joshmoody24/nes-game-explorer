@@ -262,3 +262,38 @@ layer is linear, so it adds nothing; 9,240 -> 6,160 inputs) -> 955 with bfloat16
 ~83% of it. Quality unchanged (Test A: held-out loss 2.438 vs 2.46 before; trips 58% vs 55-60%).
 bfloat16 is for training only: on the CPU, where the player acts, it made a decision 415 us vs 153 us
 in float32. Building training data by replay (~9,400 steps/s, one process) is now the slowest stage.
+
+## 2026-11-25: more data alone doesn't make a better goal-reacher
+
+Training data is now built straight into GPU memory (`experience.build(on_device=True)`; 60K recordings /
+4.7M steps peak at 17.7 GB host vs being killed at a 30 GB cap before) at ~95K steps/s. Test A
+(`python -m checks.policy_trips_check policy-data --train N --updates U`, ~160 trips each, +-4%):
+
+| recordings | updates | held-out loss | trips reached (random) |
+|---|---|---|---|
+| 4K | 5K | 2.437 | 58% (45%) |
+| 20K | 20K | 2.272 | 61% (44%) |
+| 60K | 40K (batch 512) | 2.234 | 54% (41%) |
+| 60K | 10K (batch 4096) | 2.295 | 57% (41%) |
+
+Loss improves slowly with data; trip success stays ~55-60%, 13-16 points over random, far below
+exact replay (92%). Hindsight from random play is capped by how poor a teacher random play is. Next:
+self-improvement (GCSL-style): the player makes goal-directed trips, they're relabeled with where they
+actually went, and it retrains on them.
+
+## 2026-11-25: why copying random play caps the player
+
+- **Self-improvement** (`python improve.py policy-data --rounds 4 --train 20000 --trips 20000`, 600 fixed
+  held-out trips; random 42%, exact replay 92%): learned player 57% -> 61% -> 59% over rounds 0-2, then
+  GPU out of memory in round 3 (previous round's 8.7 GB data still alive; fixed).
+- **"Already matches the goal?" inputs** (one flag per byte; not linear, unlike the dropped difference
+  input): round 0 rises from 57% to **65%** of trips (closing 73% -> 81% of the distance). Training 743
+  updates/s (1.5x wider input).
+- **Gap diagnostic** (`python -m checks.gap_accuracy_check policy-data`): predicting the pressed button is
+  ~21% right at every goal distance 1..32, flat.
+- **Ceiling** (`python -m checks.button_ceiling_check policy-data`): pressing each of the 25 button combos
+  for one step from sample states gives only ~7.5 distinct outcomes (in the chosen bytes), so no model can
+  name the pressed button more than ~30% of the time; ~33% after 4 steps. The model is at ~70% of that.
+  No pipeline bug: most buttons are interchangeable at any moment, so "which button did random play
+  press?" is mostly unanswerable, and imitating it yields a blurry, dithering player. Next: score actions
+  by how likely they lead to the goal (contrastive goal-conditioned RL) instead of imitating random play.

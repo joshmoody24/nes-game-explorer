@@ -30,7 +30,7 @@ def main():
     data = tuple(map(jnp.asarray, (rng.integers(0, 256, (observation_offsets[-1], WIDTH), dtype=np.uint8),
                                    rng.integers(0, 25, action_offsets[-1], dtype=np.uint8),
                                    observation_offsets, action_offsets)))
-    params = init_params(jax.random.key(0), 2 * WIDTH, 25)
+    params = init_params(jax.random.key(0), 3 * WIDTH, 25)
     state = OPTIMIZER.init(params)
     key = jax.random.key(1)
     params, state, values = _train_chunk(params, state, key, data, updates, batch)

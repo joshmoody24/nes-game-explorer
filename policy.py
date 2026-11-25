@@ -32,9 +32,13 @@ TRAINING_DTYPE = jnp.bfloat16
 
 
 def features(observations, goals, dtype):
-    """Observation and goal as floats in [0, 1]. (A goal-minus-observation input would add nothing: the
-    first layer is linear, so it can already weigh the two against each other.)"""
-    return jnp.concatenate([observations, goals], -1).astype(dtype) / 255
+    """
+    Observation and goal as floats in [0, 1], plus whether each byte already matches the goal. (A
+    goal-minus-observation input would add nothing, since the first layer is linear; "matches" isn't
+    linear, and many bytes are IDs, where 0x37 and 0x38 mean unrelated things.)
+    """
+    matches = observations == goals
+    return jnp.concatenate([observations.astype(dtype) / 255, goals.astype(dtype) / 255, matches.astype(dtype)], -1)
 
 
 def dense(x, layer, dtype):
@@ -95,6 +99,10 @@ class GoalPolicy:
     def __post_init__(self):
         self.params = jax.device_put(self.params, CPU)
 
+    def host_params(self):
+        """Parameters as plain NumPy arrays, for sending to other processes."""
+        return jax.tree.map(np.asarray, self.params)
+
     def action_logits(self, observations, goals):
         with jax.default_device(CPU):
             return np.asarray(_logits(self.params, jnp.asarray(observations), jnp.asarray(goals)))
@@ -135,7 +143,7 @@ def mean_loss(params, experience, key, shuffle_goals=False, batches=5, size=2048
 def train(experience, key, updates=5000, batch=512, chunk=1000, log=print):
     """Trains on the default device (the GPU when there is one), with the whole dataset copied there once."""
     init_key, key = jax.random.split(key)
-    params = init_params(init_key, 2 * len(experience.byte_indices), len(ACTIONS))
+    params = init_params(init_key, 3 * len(experience.byte_indices), len(ACTIONS))
     optimizer_state = OPTIMIZER.init(params)
     data = device_data(experience)
     for done in range(0, updates, chunk):
