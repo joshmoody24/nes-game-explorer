@@ -136,6 +136,7 @@ def parse_arguments():
     parser.add_argument("--workers", type=int, default=18)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
+    parser.add_argument("--start-state", help="a file holding a save state to explore from, instead of power-on")
     parser.add_argument("--record", type=float, default=0.1, metavar="FRACTION",
                         help="share of segments whose button sequences are saved as training data")
     parser.add_argument("--stop-after-stall", type=float, metavar="MINUTES",
@@ -163,6 +164,7 @@ def prepare_run_dir(args, settings):
     run_dir.mkdir(parents=True)
     (run_dir / "config.json").write_text(json.dumps(
         {"minutes": args.minutes, "workers": args.workers, "seed": args.seed, "resume": args.resume,
+         "start_state": args.start_state,
          "record": args.record,
          "stop_after_stall": args.stop_after_stall}
         | dataclasses.asdict(settings),
@@ -174,7 +176,7 @@ def main():
     args, settings = parse_arguments()
     run_dir = prepare_run_dir(args, settings)
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    start = start_game(emulator)
+    start = Path(args.start_state).read_bytes() if args.start_state else start_game(emulator)
     if args.resume:
         archive = resumed_archive(args.resume, settings, emulator)
     else:

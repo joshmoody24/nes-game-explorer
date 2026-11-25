@@ -515,3 +515,15 @@ near the route is required, not a better route.
   multiplicative in items: hopeless for the whole game. Needed: composition, i.e. travel across known
   territory with what you carry. Second-agent review agreed and added: playback needs re-planning, and timed
   skills (bomb jumps, ice platforms) will need reusable action chunks.
+
+## 2026-11-25 (night): the archive as a map (`graph.py`): travel is brittle
+
+Locations (place minus inventory) and edges (button chunks between them) from replaying 3000 stored paths
++ 20,000 recorded segments: 3,397 locations, 17,645 edges (stored paths alone only lead outward from the
+start, so there was no way back). `graph.travel` plans the shortest chain and makes each hop by known
+chunks, then random retries, accepting arrival further along, banning failed hops and re-planning.
+`python -m checks.travel_check resources-15min 18 300 3000`: 0 of 18 armed states reached the Long Beam
+door. First version: hops taken by the first chunk that works spent everything (arrive 0 missiles, 0-3
+energy). Keeping the arrival that holds the most (hand-given missiles, energy) preserved missiles but
+journeys still drained energy and bounced inside Norfair rooms until the re-planning limit. Fixing hops
+one by one is hill-climbing on map details; parked in favor of restarting exploration per acquisition.
