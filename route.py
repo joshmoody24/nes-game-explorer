@@ -5,8 +5,30 @@ its own states as waypoints (attempts may skip ahead, so a re-grown path is neve
 except that reaching a waypoint is judged with hand-made places (see trips).
 """
 
+import numpy as np
+
 import trips
 from controls import ACTIONS, FRAMES_PER_STEP
+
+
+class Follower:
+    """
+    Plays a route without learning: finds the route state most like the current one (most chosen bytes
+    equal) and presses the button the route pressed there. Same interface as the trained players
+    (model(memories, goal_memories) -> [rows, buttons] scores; goals are ignored).
+    """
+
+    def __init__(self, params, byte_indices):
+        self.observations, self.actions = params
+        self.byte_indices = byte_indices
+
+    def host_params(self):
+        return self.observations, self.actions
+
+    def __call__(self, memories, goal_memories):
+        similarity = (memories[:, None, self.byte_indices] == self.observations[None]).sum(-1)
+        nearest = np.minimum(similarity.argmax(1), len(self.actions) - 1)
+        return np.eye(len(ACTIONS))[self.actions[nearest]]
 
 
 def replay(emulator, start, actions):

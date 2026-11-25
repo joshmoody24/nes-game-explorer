@@ -426,3 +426,21 @@ Short-trip success is not where big gains are; next is chaining trips from power
   players on identical data (`python practice.py policy-data --compare --player ...`), Test B, 100 attempts:
   plain hindsight **63%**, advantage-weighted (learned distance, AWR, temperature 1) **51%**. No gain; the
   distance (trained on random play) is probably too noisy per step to grade single moves.
+
+## 2026-11-25 (night): design review; a no-learning route follower wins
+
+Independent review (second agent) points: the learned parts only follow routes the random archive found
+(system ceiling = random Go-Explore's ceiling); hand-made places are load-bearing in training (breaks the
+"works on Zelda" test); a third of the code is logged failures.
+
+- **Generic "reached" test** (`python -m checks.reached_check policy-data`): agreement with hand-made place
+  equality on held-out pairs: learned distance AUC 0.75, share of matching bytes AUC 0.84. Neither is a
+  drop-in replacement.
+- **Automatic place bytes** (`python -m checks.slow_bytes_check policy-data`): ranking bytes by slowness, or
+  by entropy / change rate, does not find map x/y (ranks ~1500-2650 of 3093): many bytes differ between
+  archive states yet rarely change within a recording. Per-byte statistics: ruled out.
+- **Route follower, no learning** (`route.Follower`: press the route's button at the route state with the
+  most bytes equal to the current memory; `python chase.py policy-data --route ... --follower --players
+  learned-greedy`): **92%** to Morph Ball from the start, vs 70% for the practiced student and **35% for
+  blind replay** of the same buttons under the same sticky noise. Closed-loop nearest-neighbour lookup on raw
+  RAM beats the trained network by a wide margin (cf. episodic control).

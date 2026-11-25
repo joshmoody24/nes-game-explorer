@@ -67,6 +67,7 @@ def main():
     parser.add_argument("--players", default="random,learned,search-learned,search-true-distance")
     parser.add_argument("--per-hop", action="store_true")
     parser.add_argument("--player", help="a saved player (parameters, byte indices) instead of the distilled student")
+    parser.add_argument("--follower", action="store_true", help="play the route with route.Follower (no learning)")
     parser.add_argument("--route", help="a stitched route (see route.py) to take waypoints from, instead of the archive")
     parser.add_argument("--spacing", type=int, default=10, help="steps between waypoints on a stitched route")
     args = parser.parse_args()
@@ -86,6 +87,11 @@ def main():
     if args.player:
         params, byte_indices = pickle.loads(Path(args.player).read_bytes())
     player = policy.GoalPolicy(params, byte_indices)
+    if args.follower:
+        import route as routes
+        follower_actions = np.frombuffer(actions, np.uint8)
+        player = routes.Follower((np.stack([emulator.memory(s)[byte_indices] for s in path[:-1]]), follower_actions),
+                                 byte_indices)
     videos = Path("videos")
     videos.mkdir(exist_ok=True)
     if args.per_hop:
