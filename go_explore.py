@@ -49,6 +49,7 @@ class Archive:
     holdings: list = field(default_factory=list)  # see explorers.holdings
     active: list = field(default_factory=list)  # False once another visit to the same place beats it
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
+    place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
 
     def path_length(self, i):
@@ -70,6 +71,7 @@ class Archive:
             self.parents[slot] = parent
             self.updates.append((place, visit))
             return "better"
+        self.place_numbers.setdefault(place, len(self.place_numbers))
         self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
@@ -82,8 +84,14 @@ class Archive:
         return "better" if visits else "new"
 
     def choose(self, rng):
-        """A rarely chosen visit still worth keeping, favoring the least chosen."""
-        weights = np.array(self.active) / np.sqrt(1 + np.array(self.times_chosen))
+        """
+        A rarely chosen visit still worth keeping. Chooses among places, not visits (each place's weight split
+        evenly between its kept visits), so places holding several kept visits don't slow coverage.
+        """
+        active = np.array(self.active)
+        place_of = np.array([self.place_numbers[p] for p in self.places]) if len(self.place_numbers) else None
+        visits_per_place = np.bincount(place_of, weights=active)
+        weights = active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
         index = int(rng.choice(len(self.places), p=weights / weights.sum()))
         self.times_chosen[index] += 1
         return index

@@ -71,6 +71,7 @@ def main():
     print("  " + ", ".join(f"{b:#06x}{'=' + names[b] if b in names else ''}: {decreases[b]:.4f}/{increases[b]:.4f}, "
                            f"differs between plays {controllable[b]:.0%}" for b in ranked[:20]))
     picks = [int(b) for b in ranked[:12] if score[b] > 0]
+    print("increases per step, rarest first: " + ", ".join(f"{b}: {increases[b]:.2e}" for b in sorted(ranked[:4], key=lambda b: increases[b])))
     print("for --keep-more: " + ",".join(f"{b}:{max(1, int(replayed.observations[:, b].max()))}" for b in picks))
     for name, index in NAMED.items():
         print(f"  {name:>15} ({index:#06x}): rank {int(np.flatnonzero(ranked == index)[0])}, "

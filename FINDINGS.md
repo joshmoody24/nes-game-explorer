@@ -589,3 +589,13 @@ spendables.
   now a beating visit takes over the beaten one's slot. `--stop-at-item` ends a run at a milestone.
 - Fast-protocol lesson: 3 seeds x 6 workers x 5 min equals ~1.7 min of a full run: too short for the
   Long Beam (3 full-run minutes before); judge by proxies (armed visits at the door), not the rare event.
+- **Pareto with place-first selection** (3 seeds x 6 workers x 8 min, vs missiles-only hoarding): Pareto
+  median energy 24-33 but door visits hold **0** missiles; missiles-only: median energy 2-4, door visits
+  mostly 3-4 missiles. Pareto spreads effort over healthy and armed lineages, and the healthy ones that spent
+  their missiles reach the door first. A trade-off in effort, not a bug. Also: 8 min x 6 workers (~2.7
+  full-run minutes) is too little budget for long-distance effects like carrying missiles back.
+- **Rarity order**: measured increase rates, rarest first: energy tens 2.1e-5, byte 35 2.6e-5, byte 40
+  3.4e-5, missiles 4.3e-5 per step (enemies drop missiles). "Prefer the rarest" would put energy first:
+  nothing generic says missiles matter more; only the door does.
+- Testing instead: **one exploration per detected spendable** (portfolio: each hoards only its own byte),
+  4 x 4 workers x 25 min from the first missiles, stopping at the Long Beam.
