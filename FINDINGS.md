@@ -606,3 +606,10 @@ spendables.
   branch opens something new win, avoids having to know which resource matters. Still hand-given: the layer
   start state, the "top 4" cutoff, and hand-made places. No NES Zelda ROM on unit (Josh to provide) so the
   Zelda rule can't be measured yet.
+- **Automatic layer trigger, not solved yet** (`python -m checks.one_way_check <runs joined by +>`):
+  bits that only ever go 0 -> 1 in recordings include the Morph Ball and missile-capacity bits but also
+  300-500 junk bits (never seen flipping back in short recordings); the Long Beam and Bombs bits never
+  appear, since sampled recordings rarely include those pickups. "Most one-way bits on" picks Bombs visits
+  in layer 2 but not Long Beam visits in layer 1; "rarity-weighted one-way bits gained since the layer
+  start" picks Long Beam visits in layer 1 but not Bombs visits in layer 2. Needs a better signal, e.g.
+  watching every step for bits that flip on and stay on, instead of sampled recordings.

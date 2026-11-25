@@ -3,7 +3,7 @@ Can lasting acquisitions (items, capacity upgrades) be found without knowing the
 segments, lists memory bits that went 0 -> 1 between consecutive steps but never 1 -> 0, and shows where
 the known Metroid item and missile-capacity bytes fall.
 
-Usage: python -m checks.one_way_check <run name> [recordings]
+Usage: python -m checks.one_way_check <run name>[+<run name>...] [recordings]
 """
 
 import os
@@ -22,7 +22,8 @@ NAMED = {at(ITEMS): "items", at(MAX_MISSILES): "max missiles", at(ENERGY_TANKS):
 
 def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    recordings = valid_recordings(Path("runs") / sys.argv[1])
+    runs = sys.argv[1].split("+")  # several runs joined with +, for more evidence of bits flipping back
+    recordings = [r for run in runs for r in valid_recordings(Path("runs") / run)]
     count = int(sys.argv[2]) if len(sys.argv) > 2 else 20000
     np.random.default_rng(0).shuffle(recordings)
     replayed = build(emulator, recordings[:count], np.arange(len(emulator.memory())))
@@ -34,6 +35,7 @@ def main():
         up |= step_up
         down |= step_down
     one_way = np.flatnonzero(up & ~down)
+    np.save(Path("cache") / f"one-way-bits-{sys.argv[1]}.npy", one_way)
     print(f"{len(one_way)} bits only ever went 0 -> 1 (of {up.sum()} that ever went up):")
     print("  " + ", ".join(f"{b // 8:#06x}.{7 - b % 8}{'=' + NAMED[b // 8] if b // 8 in NAMED else ''}" for b in one_way[:60]))
     for index, name in NAMED.items():
