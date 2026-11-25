@@ -10,15 +10,20 @@
         buildPhase = "$CC -O2 -shared -fPIC shim.c -o libshim.so";
         installPhase = "mkdir -p $out/lib && cp libshim.so $out/lib/";
       };
+      rocm = import ./nix/jax-rocm.nix { inherit pkgs; };
     in
     {
       devShells.x86_64-linux.default = pkgs.mkShell {
         packages = [
-          (pkgs.python313.withPackages (ps: [ ps.jax ps.optax ps.numpy ps.matplotlib ]))
+          (pkgs.python313.withPackages (ps: [ ps.jax ps.optax ps.numpy ps.matplotlib (rocm.jaxRocm ps) ]))
         ];
         QUICKNES_CORE = "${pkgs.libretro.quicknes}/lib/retroarch/cores/quicknes_libretro.so";
         SHIM = "${shim}/lib/libshim.so";
         FCEUMM_CORE = "${pkgs.libretro.fceumm}/lib/retroarch/cores/fceumm_libretro.so";
+        ROCM_PATH = "${rocm.rocmRoot}";
+        # Allocate GPU memory as needed rather than 75% per process up front, and never above 90%.
+        XLA_PYTHON_CLIENT_PREALLOCATE = "false";
+        XLA_PYTHON_CLIENT_MEM_FRACTION = "0.9";
       };
     };
 }

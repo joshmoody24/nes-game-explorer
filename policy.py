@@ -56,21 +56,48 @@ def sample_batch(rng, experience, size):
 OPTIMIZER = optax.adamw(3e-4, weight_decay=1e-4)
 
 
-@partial(jax.jit, donate_argnums=(0, 1))
-def _update(params, optimizer_state, observations, goals, actions):
-    value, grads = jax.value_and_grad(loss)(params, observations, goals, actions)
-    updates, optimizer_state = OPTIMIZER.update(grads, optimizer_state, params)
-    return optax.apply_updates(params, updates), optimizer_state, value
+def sample_on_device(key, data, size):
+    """sample_batch's draw, done on the accelerator from arrays already there."""
+    observations, actions, observation_offsets, action_offsets = data
+    step_key, gap_key = jax.random.split(key)
+    steps = jax.random.randint(step_key, (size,), 0, len(actions))
+    recording = jnp.searchsorted(action_offsets, steps, side="right") - 1
+    t = steps - action_offsets[recording]
+    remaining = action_offsets[recording + 1] - action_offsets[recording] - t
+    gap = 1 + (jax.random.uniform(gap_key, (size,)) * jnp.minimum(MAX_GAP, remaining)).astype(jnp.int32)
+    base = observation_offsets[recording] + t
+    return observations[base], observations[base + gap], actions[steps]
 
+
+@partial(jax.jit, static_argnames=["updates", "batch"], donate_argnums=(0, 1))
+def _train_chunk(params, optimizer_state, key, data, updates, batch):
+    """Many updates in one compiled call, so the accelerator never waits on Python."""
+    def update(carry, key):
+        params, optimizer_state = carry
+        value, grads = jax.value_and_grad(loss)(params, *sample_on_device(key, data, batch))
+        changes, optimizer_state = OPTIMIZER.update(grads, optimizer_state, params)
+        return (optax.apply_updates(params, changes), optimizer_state), value
+
+    (params, optimizer_state), values = jax.lax.scan(update, (params, optimizer_state), jax.random.split(key, updates))
+    return params, optimizer_state, values
+
+
+
+CPU = jax.devices("cpu")[0]
 
 
 @dataclass
 class GoalPolicy:
+    """Acts on the CPU: one decision at a time is too small for a GPU, where launch overhead dominates."""
     params: list
     byte_indices: np.ndarray
 
+    def __post_init__(self):
+        self.params = jax.device_put(self.params, CPU)
+
     def action_logits(self, observations, goals):
-        return np.asarray(logits(self.params, jnp.asarray(observations), jnp.asarray(goals)))
+        with jax.default_device(CPU):
+            return np.asarray(_logits(self.params, jnp.asarray(observations), jnp.asarray(goals)))
 
     def act(self, memory, goal_memory, rng, temperature=1.0):
         """A button index for the full-memory current state and goal. Temperature 0 picks the most likely."""
@@ -81,12 +108,22 @@ class GoalPolicy:
         return int(rng.choice(len(ACTIONS), p=probabilities / probabilities.sum()))
 
 
-def train(experience, key, updates=5000, batch=512, log=print):
-    rng = np.random.default_rng(int(jax.random.randint(key, (), 0, 2**31 - 1)))
-    params = init_params(key, 3 * len(experience.byte_indices), len(ACTIONS))
+_logits = jax.jit(logits)
+
+
+def train(experience, key, updates=5000, batch=512, chunk=100, log=print):
+    """
+    Trains on the default device (the GPU when there is one), with the whole dataset copied there once.
+    chunk: updates per compiled call. The ROCm plugin (0.12.0) crashes on compiled loops of ~300+ updates.
+    """
+    init_key, key = jax.random.split(key)
+    params = init_params(init_key, 3 * len(experience.byte_indices), len(ACTIONS))
     optimizer_state = OPTIMIZER.init(params)
-    for update in range(updates):
-        params, optimizer_state, value = _update(params, optimizer_state, *map(jnp.asarray, sample_batch(rng, experience, batch)))
-        if update % 1000 == 0 or update == updates - 1:
-            log(f"update {update}: loss {float(value):.3f}")
+    data = tuple(map(jnp.asarray, (experience.observations, experience.actions,
+                                   experience.observation_offsets, experience.action_offsets)))
+    for done in range(0, updates, chunk):
+        key, chunk_key = jax.random.split(key)
+        params, optimizer_state, values = _train_chunk(params, optimizer_state, chunk_key, data,
+                                                        min(chunk, updates - done), batch)
+        log(f"update {done + len(values)}: loss {float(values[-1]):.3f}")
     return GoalPolicy(params, experience.byte_indices)

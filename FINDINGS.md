@@ -219,3 +219,22 @@ recordings, 2x that many steps, 25% sticky actions); places used only to judge.
   Fixed; runs now use `tools/capped` (systemd scope with MemoryMax).
 - Timing: building data 10K steps/s (replay + 10 KB memory copy per step); training 63 updates/s on CPU
   (batch 512, ~9,240 inputs); one learned decision ~360 us vs ~80 us per emulator step.
+
+## 2026-11-25: JAX on the AMD GPU (RX 7900 XT) via Nix
+
+`nix/jax-rocm.nix`: AMD's `jax-rocm7-pjrt` / `jax-rocm7-plugin` 0.12.0 wheels from PyPI, autopatchelf'd
+against nixpkgs' ROCm 7.2.4. The wheels also need AMD's renamed copies of libdrm, libdrm_amdgpu and
+libnuma (`librocm_sysdeps_*`) whose symbols carry `AMDROCM_SYSDEPS_1.0` version labels; nixpkgs' libdrm
+and numactl are rebuilt with a version script / renamed labels and renamed sonames to match. nixpkgs
+packages only the CUDA plugins. Devshell sets ROCM_PATH, no preallocation, max 90% VRAM.
+`python -m checks.gpu_check`: 4096^2 fp32 matmul 6.1 TFLOP/s on the GPU vs 1.9 on the CPU.
+
+- For comparison, nixpkgs' prebuilt `torchWithRocm` (5.9 GB download) trained the same network shape
+  at 767 updates/s (batch 512).
+- Policy training: copying each batch from the host gave only 123 updates/s; keeping the dataset on the
+  device and sampling there inside compiled `lax.scan` chunks gives 311 updates/s (vs 63 on CPU),
+  including compilation. Single decisions run on the CPU (166 us jitted); on the GPU one took 806 us.
+- Known plugin bugs: compiled loops of ~300+ updates segfault inside `GpuExecutable::ExecuteThunksImpl`
+  (100 per call works; disabling command buffers only moves the limit), and every JAX process
+  segfaults at interpreter exit (exit code 139), even after a bare `import jax`; results are unaffected.
+- New bottleneck: building training data by replay, ~9,500 steps/s in one process.
