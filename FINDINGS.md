@@ -388,3 +388,14 @@ Teacher (learned distance + 4-step lookahead): 73% of the 600 held-out trips. St
 trained-on lessons vs 14% held out, and held-out loss worsens with training (2.84 -> 3.02). Real goals give
 one goal per trip; hindsight gives many per trip. Teacher choices are also spread (no button over 9%).
 More teacher trips help hindsight students: 64% -> 68% for 5K -> 10K.
+
+Seed noise check (hindsight students on the cached 20K-trip teacher, 600 held-out trips):
+
+| teacher trips | 10K updates, seeds 1/2/3 | 30K updates |
+|---|---|---|
+| first 10K | 61 / 61 / 63% | 65% |
+| all 20K | 63 / 66 / 64% | 66% |
+
+The earlier 68% (10K trips) was a lucky draw; seeds and data move results ~3 points. Distilled students
+sit at ~63-66%, a few points over random-play-trained players (60-65%) and well under the teacher (73%).
+Short-trip success is not where big gains are; next is chaining trips from power-on (Test B).
