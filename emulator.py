@@ -35,6 +35,24 @@ class GameInfo(ctypes.Structure):
                 ("meta", ctypes.c_char_p)]
 
 
+def state_blocks(state):
+    """Offsets of the tagged blocks in a QuickNES save state: {tag: (start, size)}. Layout: 8-byte header, then tag, size, data."""
+    blocks, offset = {}, 8
+    while offset + 8 <= len(state):
+        tag, size = state[offset:offset + 4].decode(), int.from_bytes(state[offset + 4:offset + 8], "little")
+        blocks[tag] = (offset + 8, size)
+        offset += 8 + size
+    return blocks
+
+
+def memory_of(state, cartridge_slice):
+    """System RAM followed by cartridge RAM, read out of a save state."""
+    blocks = state_blocks(state)
+    system_start, system_size = blocks["LRAM"]
+    return np.concatenate([np.frombuffer(state[system_start:system_start + system_size], np.uint8),
+                           np.frombuffer(state[cartridge_slice], np.uint8)])
+
+
 def button_mask(*names):
     return sum(1 << BUTTONS[name] for name in names)
 
@@ -78,6 +96,12 @@ class Emulator:
             raise RuntimeError(f"Core {core_path} exposes no 2 KB system RAM (got {ram_size} bytes)")
         # A live view: it always shows the current RAM, no copying.
         self.ram = np.ctypeslib.as_array(ctypes.cast(ram_pointer, ctypes.POINTER(ctypes.c_uint8)), (ram_size,))
+        # The core doesn't expose cartridge RAM ($6000-$7FFF) directly, but save states include it.
+        blocks = state_blocks(self.save())
+        if "SRAM" not in blocks:
+            raise RuntimeError(f"Save states from {core_path} have no cartridge RAM block")
+        self._cartridge_slice = slice(blocks["SRAM"][0], sum(blocks["SRAM"]))
+        self._nametable_slice = slice(blocks["NTAB"][0], sum(blocks["NTAB"]))
 
     def _environment(self, command, data):
         if command == ENVIRONMENT_GET_CAN_DUPE:
@@ -108,6 +132,14 @@ class Emulator:
         if not self._core.retro_serialize(self._state_buffer, self.state_size):
             raise RuntimeError("Save state failed")
         return self._state_buffer.raw
+
+    def memory(self):
+        """System RAM ($0000-$07FF) followed by cartridge RAM ($6000-$7FFF), as one uint8 array."""
+        return memory_of(self.save(), self._cartridge_slice)
+
+    def nametable(self, state=None):
+        """The background tile layout (2 KB), from a save state or the current one."""
+        return (state or self.save())[self._nametable_slice]
 
     def load(self, state):
         if not self._core.retro_unserialize(state, len(state)):
