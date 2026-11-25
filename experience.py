@@ -4,13 +4,18 @@ indices) is replayed to regenerate the memory at every step; nothing per-frame i
 Game-agnostic: an observation is the memory bytes that vary across recordings, nothing named.
 """
 
+import os
 import pickle
 import zlib
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from multiprocessing import get_context
 
 import numpy as np
 
 from controls import ACTIONS, FRAMES_PER_STEP
+from emulator import Emulator
+from explorers import ROM
 
 
 @dataclass
@@ -69,17 +74,47 @@ def input_echo_bytes(replayed, recordings):
     return np.flatnonzero(accuracy >= INPUT_ECHO_ACCURACY)
 
 
-def build(emulator, recordings, byte_indices=None):
-    """Replays recordings into an Experience. byte_indices defaults to bytes that vary within them, minus
-    bytes that just echo the buttons."""
-    replayed = [replay_memories(emulator, state, actions) for state, actions in recordings]
+def choose_bytes(emulator, recordings, sample=500):
+    """Memory bytes that vary within a sample of recordings, minus bytes that just echo the buttons."""
+    replayed = [replay_memories(emulator, state, actions) for state, actions in recordings[:sample]]
+    stacked = np.concatenate(replayed)
+    varying = np.flatnonzero((stacked != stacked[0]).any(0))
+    return np.setdiff1d(varying, input_echo_bytes(replayed, recordings[:sample]))
+
+
+def _start_replayer(byte_indices):
+    global _emulator, _offsets
+    _emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
+    _offsets = _emulator.state_offsets(byte_indices)
+
+
+def _replay_selected(recordings):
+    """In a worker: each recording's chosen bytes at every step, read straight from save states."""
+    results = []
+    for state, actions in recordings:
+        _emulator.load(state)
+        rows = np.empty((len(actions) + 1, len(_offsets)), np.uint8)
+        rows[0] = np.frombuffer(state, np.uint8)[_offsets]
+        for i, action in enumerate(actions):
+            _emulator.run(ACTIONS[action], FRAMES_PER_STEP)
+            rows[i + 1] = np.frombuffer(_emulator.save(), np.uint8)[_offsets]
+        results.append(rows)
+    return results
+
+
+def build(emulator, recordings, byte_indices=None, workers=18):
+    """Replays recordings into an Experience, in parallel worker processes, into one preallocated array."""
     if byte_indices is None:
-        sample = replayed[:500]
-        stacked = np.concatenate(sample)
-        varying = np.flatnonzero((stacked != stacked[0]).any(0))
-        byte_indices = np.setdiff1d(varying, input_echo_bytes(sample, recordings[:500]))
-    observations = np.concatenate([memories[:, byte_indices] for memories in replayed])
-    observation_offsets = np.cumsum([0] + [len(m) for m in replayed])
+        byte_indices = choose_bytes(emulator, recordings)
+    observation_offsets = np.cumsum([0] + [len(actions) + 1 for _, actions in recordings])
     action_offsets = np.cumsum([0] + [len(actions) for _, actions in recordings])
+    observations = np.empty((observation_offsets[-1], len(byte_indices)), np.uint8)
+    bounds = np.linspace(0, len(recordings), min(len(recordings), workers * 8) + 1).astype(int)
+    chunks = [recordings[a:b] for a, b in zip(bounds[:-1], bounds[1:])]
+    with ProcessPoolExecutor(workers, mp_context=get_context("spawn"), initializer=_start_replayer,
+                             initargs=(byte_indices,)) as pool:
+        for first, results in zip(bounds[:-1], pool.map(_replay_selected, chunks)):
+            for r, rows in enumerate(results, start=first):
+                observations[observation_offsets[r]:observation_offsets[r + 1]] = rows
     return Experience(byte_indices, observations, np.concatenate([a for _, a in recordings]),
                       observation_offsets, action_offsets, [state for state, _ in recordings])

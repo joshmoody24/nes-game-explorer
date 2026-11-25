@@ -4,11 +4,11 @@ held-out recordings, the goal is where that recording was 10-30 steps later. Eac
 steps, with sticky-action noise (25% of steps repeat the previous button instead). Places are used only
 to judge success.
 
-Usage: python -m checks.policy_trips_check <run name> [training recordings] [trials]
+Usage: python -m checks.policy_trips_check <run name> [--train N] [--trials N] [--updates N] [--batch N]
 """
 
+import argparse
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -51,9 +51,15 @@ def trip(emulator, start, goal_place, budget, choose, rng):
 
 
 def main():
-    run_dir = Path("runs") / sys.argv[1]
-    training_count = int(sys.argv[2]) if len(sys.argv) > 2 else 4000
-    trials = int(sys.argv[3]) if len(sys.argv) > 3 else 300
+    parser = argparse.ArgumentParser()
+    parser.add_argument("run")
+    parser.add_argument("--train", type=int, default=4000, help="training recordings")
+    parser.add_argument("--trials", type=int, default=300)
+    parser.add_argument("--updates", type=int, default=5000)
+    parser.add_argument("--batch", type=int, default=512)
+    args = parser.parse_args()
+    run_dir = Path("runs") / args.run
+    training_count, trials = args.train, args.trials
     emulator = Emulator(os.environ["QUICKNES_CORE"], "roms/metroid.nes")
     recordings = valid_recordings(run_dir)
     rng = np.random.default_rng(0)
@@ -65,7 +71,7 @@ def main():
     print(f"{len(recordings)} usable recordings; training on {training_count} "
           f"({len(experience.actions)} steps, {len(experience.byte_indices)} varying bytes); "
           f"{len(held_out)} held out")
-    policy = train(experience, jax.random.key(0))
+    policy = train(experience, jax.random.key(0), updates=args.updates, batch=args.batch)
     trained = time.perf_counter()
     from policy import loss, sample_batch
     import jax.numpy as jnp
@@ -81,7 +87,7 @@ def main():
                                        jnp.asarray(goals[batch_rng.permutation(len(goals))]), jnp.asarray(actions))))
         print(f"  same, with each goal swapped for a random other one: {np.mean(shuffled):.3f}")
     print(f"timing: building data {built - started:.0f}s ({len(experience.actions) / (built - started):,.0f} steps/s), "
-          f"training {trained - built:.0f}s ({5000 / (trained - built):.0f} updates/s)")
+          f"training {trained - built:.0f}s ({args.updates / (trained - built):.0f} updates/s)")
 
     settings = Settings()
     outcomes = {name: [] for name in ["learned, sampled", "learned, temperature 0.3", "learned, most likely button",

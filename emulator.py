@@ -147,6 +147,12 @@ class Emulator:
         return np.concatenate([np.frombuffer(state[self._system_slice], np.uint8),
                                np.frombuffer(state[self._cartridge_slice], np.uint8)])
 
+    def state_offsets(self, memory_indices):
+        """Where each given index of memory() sits inside a save state, so hot loops can read bytes directly."""
+        memory_indices = np.asarray(memory_indices)
+        return np.where(memory_indices < 0x800, self._system_slice.start + memory_indices,
+                        self._cartridge_slice.start + memory_indices - 0x800)
+
     def view(self, state):
         """Like memory(state), but reads bytes on demand; much cheaper when only a few are needed."""
         return MemoryView(state, self._system_slice.start, self._cartridge_slice.start)
