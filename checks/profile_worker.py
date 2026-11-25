@@ -10,7 +10,8 @@ import time
 import numpy as np
 
 from emulator import Emulator
-from explorers import ACTIONS, FRAMES_PER_STEP, Settings, explore
+from controls import ACTIONS, FRAMES_PER_STEP
+from explorers import Settings, explore
 from metroid import start_game
 
 emulator = Emulator(os.environ["QUICKNES_CORE"], "roms/metroid.nes")

@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from emulator import Emulator
-from explorers import ROM, Explorers, Settings, hand_made_place
+from explorers import ROM, Explorers, Settings, hand_made_place, score
 from metroid import start_game
 from progress import Progress
 
@@ -36,14 +36,28 @@ class Archive:
     selection: str
     places: list = field(default_factory=list)
     states: list = field(default_factory=list)
+    scores: list = field(default_factory=list)  # see explorers.score; the kept state has the best seen
     times_chosen: list = field(default_factory=list)
     discoveries: list = field(default_factory=list)  # new places found by segments started here
+    index: dict = field(default_factory=dict)  # place -> position in the lists above
+    updates: list = field(default_factory=list)  # append-only (place, score) log that workers sync from
 
-    def add(self, place, state):
+    def offer(self, place, state, score):
+        """Keeps state if place is new or score beats the kept state's. Returns True if the place is new."""
+        if place in self.index:
+            i = self.index[place]
+            if score > self.scores[i]:
+                self.states[i], self.scores[i] = state, score
+                self.updates.append((place, score))
+            return False
+        self.index[place] = len(self.places)
         self.places.append(place)
         self.states.append(state)
+        self.scores.append(score)
         self.times_chosen.append(0)
         self.discoveries.append(0)
+        self.updates.append((place, score))
+        return True
 
     def choose(self, rng):
         chosen = np.array(self.times_chosen)
@@ -70,20 +84,22 @@ def directory_gigabytes(path):
 def resumed_archive(run_name, settings, emulator):
     """An earlier run's saved states, re-sorted into places under the current settings."""
     saved = pickle.loads(zlib.decompress((RUNS / run_name / "checkpoint.pkl.z").read_bytes()))
-    archive, seen = Archive(settings.selection), set()
+    archive = Archive(settings.selection)
     for state in saved["states"]:
-        place = hand_made_place(emulator.view(state), settings)
-        if place not in seen:
-            seen.add(place)
-            archive.add(place, state)
+        memory = emulator.view(state)
+        archive.offer(hand_made_place(memory, settings), state, score(memory, settings))
     return archive
 
 
-def checkpoint(run_dir, archive):
-    """Plain data only, so a checkpoint loads without this module."""
+def checkpoint(run_dir, archive, segment_log):
+    """
+    Plain data only, so a checkpoint loads without this module. segments.npz has one row per segment:
+    the archive index it started from, how many new places it added, and its frames.
+    """
     temporary = run_dir / "checkpoint.tmp"
     temporary.write_bytes(zlib.compress(pickle.dumps(dataclasses.asdict(archive)), level=1))
     temporary.rename(run_dir / "checkpoint.pkl.z")
+    np.savez(run_dir / "segments.npz", **{name: np.array(values) for name, values in segment_log.items()})
 
 
 def parse_arguments():
@@ -130,20 +146,22 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = start_game(emulator)
     if args.resume:
+        assert settings.keep != "empowerment", "resuming would mean measuring empowerment for every saved state"
         archive = resumed_archive(args.resume, settings, emulator)
     else:
         archive = Archive(settings.selection)
-        archive.add(hand_made_place(emulator.view(start), settings), start)
-    known = set(archive.places)
+        memory = emulator.view(start)
+        archive.offer(hand_made_place(memory, settings), start, score(memory, settings))
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0
     gaps = []
+    segment_log = {"start": [], "new_places": [], "frames": []}
     explorers = Explorers(args.workers, settings, args.seed)
 
     def assign(worker_index):
         index = archive.choose(rng)
-        explorers.send(worker_index, index, archive.states[index], archive.places)
+        explorers.send(worker_index, index, archive.states[index], archive.updates)
 
     for worker_index in range(explorers.count):
         assign(worker_index)
@@ -157,11 +175,12 @@ def main():
                 frames += segment.frames
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
-                for place, state in segment.found.items():
-                    if place not in known:
-                        known.add(place)
-                        archive.add(place, state)
-                        archive.discoveries[segment.start] += 1
+                new_places = sum(archive.offer(place, state, state_score)
+                                 for place, (state, state_score) in segment.found.items())
+                archive.discoveries[segment.start] += new_places
+                segment_log["start"].append(segment.start)
+                segment_log["new_places"].append(new_places)
+                segment_log["frames"].append(segment.frames)
                 assign(worker_index)
             now = time.perf_counter()
             if now - last_log > LOG_EVERY_SECONDS:
@@ -177,10 +196,10 @@ def main():
                     print(f"stopping: archive grew under 1% in the last {args.stop_after_stall} minutes", flush=True)
                     break
             if now - last_checkpoint > CHECKPOINT_EVERY_SECONDS:
-                checkpoint(run_dir, archive)
+                checkpoint(run_dir, archive, segment_log)
                 last_checkpoint = now
     explorers.close()
-    checkpoint(run_dir, archive)
+    checkpoint(run_dir, archive, segment_log)
     print(json.dumps(line), flush=True)
 
 

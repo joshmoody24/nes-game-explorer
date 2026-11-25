@@ -98,3 +98,28 @@ Races: `python race.py <name> <minutes> "<label>=<flags>" ...` (3 seeds x 6 work
   wall Antithesis fixed by hand ("prefer more missiles"); we need a generic way to notice resources.
 - The stall rule (archive growth under 1% in 10 min) never fired: places grew 57% in the last 10 min
   while items stayed flat. New places are cheap; it measures wandering, not progress.
+
+## 2026-11-24: keeping states by learned promise or by empowerment
+
+- **Learned promise (`promise.py`, `python -m checks.promise_check`)**: a model from raw memory to
+  "new places found per trip", trained on a 4-minute run resumed from the stuck archive. Only 231
+  discoveries in 411,775 trips, so too little signal: 23% deviance explained on held-out places (95%
+  on training), refilling missiles *lowered* predicted promise, and the top bytes looked like room
+  and enemy data. Outcome-based promise can't learn the value of something that has never paid off.
+- **Hand-given "keep the state with more missiles"** (resumed from the stuck archive, 2.5 min, 3 seeds):
+  no difference from keeping the first state.
+- **Empowerment (`empowerment.py`)**: replay random buttons from one save state; because emulation is
+  deterministic, memory bits that differ between replays were changed by the buttons. Paired test
+  (`python -m checks.empowerment_check`): the same state edited from 0 to 5 missiles scores higher in
+  93% of 100 states (8 replays x 30 steps); flipping a never-varying byte changes it in 0%. Cheaper
+  settings: 4 x 10 steps still 81% higher / 10% lower; 2 x 15 drops to 55% / 21%.
+- **Keeping states by empowerment** (fresh 15-min run, `runs/empowerment-15min`, 4 x 10 replays per
+  scored state; new places plus one sampled revisit per segment scored): exploration throughput fell
+  to ~330K frames/s, yet milestones came 1.5-1.8x sooner than the keep-first 30-min run (first
+  missiles 2:24 vs 4:18, Norfair 3:10 vs 4:46), and it collected the first energy tank of any run
+  (14.7 min, Brinstar map 7,25, without the Long Beam). But it did not keep ammo: 95% of states with
+  missile capacity are empty, the same as keep-first (93%). Likely because scores vary ~4x between
+  states while ammo moves them ~6%, so unpaired comparisons ignore ammo; and random play spends
+  missiles within seconds, so full-ammo revisits are rare. One run each; not yet repeated with seeds.
+- The walkthrough route (Long Beam, then lava corridors with an energy tank) is an order, not a
+  requirement: the energy tank area was reached without the Long Beam.

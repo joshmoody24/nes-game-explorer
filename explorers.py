@@ -1,9 +1,10 @@
 """
 Worker processes that press random buttons from saved states, one emulator each.
 
-Each worker keeps its own copy of the set of known places, so it can end a segment that has stopped
-finding anything new and send back only places that are new. The main process's list of places only
-ever grows, so keeping a worker in sync just means sending the places added since its last task.
+Each worker keeps its own copy of the known places and the score of the state kept for each, so it
+can end a segment that has stopped finding anything new and send back only states that are new or
+better. The main process keeps an append-only log of (place, score) updates, so keeping a worker in
+sync just means sending the updates logged since its last task.
 """
 
 import os
@@ -13,19 +14,15 @@ from multiprocessing.connection import wait
 
 import numpy as np
 
-from emulator import Emulator, button_mask
+from controls import ACTIONS, FRAMES_PER_STEP
+from emulator import Emulator
+from empowerment import action_diversity
 from metroid import (CURRENT_MISSILES, ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES,
                      ROOM_X, ROOM_Y, area_of, at)
 from progress import Progress
 
 ROM = "roms/metroid.nes"
-FRAMES_PER_STEP = 4
 PROGRESS_SAMPLE_EVERY = 25
-# Every button except START, which pauses on most NES games. Don't prune by guessing what a button does in
-# one game: leaving out SELECT (Metroid's missile switch) once made every red door impossible to open.
-ACTIONS = [button_mask(*direction, *buttons)
-           for direction in [(), ("LEFT",), ("RIGHT",), ("UP",), ("DOWN",)]
-           for buttons in [(), ("A",), ("B",), ("A", "B"), ("SELECT",)]]
 
 
 @dataclass(frozen=True)
@@ -37,9 +34,18 @@ class Settings:
     # sustained moves (a full jump, a run across a room) instead of jittering in place.
     repeat_probability: float = 0.9
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
-    selection: str = "least chosen"  # or "productive": also favor places that recently led somewhere new
+    selection: str = "least-chosen"  # or "productive": also favor places that recently led somewhere new
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
+    # Which state a place keeps: "first" (the first one seen); "empowerment" (the state from which my
+    # actions change the most memory, see empowerment.py); or, as a hand-given diagnostic,
+    # "more-missiles" (replace it whenever a visit arrives with more missiles).
+    keep: str = "first"
+
+    def __post_init__(self):
+        # Catches typos in flags, which would otherwise silently fall back to the default behavior.
+        assert self.keep in ("first", "empowerment", "more-missiles"), f"unknown keep {self.keep!r}"
+        assert self.selection in ("least-chosen", "productive"), f"unknown selection {self.selection!r}"
 
 
 def hand_made_place(memory, settings):
@@ -50,9 +56,23 @@ def hand_made_place(memory, settings):
             int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None)
 
 
+def score(memory, settings):
+    """Higher-scoring states replace lower ones in the same place. Empowerment is scored separately, after a
+    segment, because measuring it costs replays."""
+    return int(memory[at(CURRENT_MISSILES)]) if settings.keep == "more-missiles" else 0
+
+
+EMPOWERMENT_REPLAYS, EMPOWERMENT_STEPS = 4, 10  # cheapest setting that still tells missiles from none ~80% of the time
+
+
+def empowered(emulator, rng, state):
+    return action_diversity(emulator, state, rng, EMPOWERMENT_REPLAYS, EMPOWERMENT_STEPS)
+
+
 @dataclass
 class Segment:
-    """What one stretch of random buttons found: places not known when it started, with a state at each."""
+    """What one stretch of random buttons found: {place: (state, score)} for places that were new, or
+    reached with a better score than the kept state's when the segment started."""
     start: int  # archive index it started from
     found: dict
     progress: Progress
@@ -65,6 +85,7 @@ def explore(emulator, rng, settings, known, start, start_state):
     found, progress, gaps = {}, Progress(), []
     action = rng.integers(len(ACTIONS))
     stale = 0
+    revisit, revisits = None, 0  # one revisit of a known place, sampled uniformly, to score for empowerment
     for step in range(settings.steps_per_segment):
         if rng.random() > settings.repeat_probability:
             action = rng.integers(len(ACTIONS))
@@ -74,26 +95,40 @@ def explore(emulator, rng, settings, known, start, start_state):
         if memory[GAME_MODE] == GAME_OVER:
             break
         place = hand_made_place(memory, settings)
-        if place in known or place in found:
+        new = place not in known and place not in found
+        state_score = score(memory, settings)
+        if new or state_score > max(known.get(place, -1), found.get(place, (None, -1))[1]):
+            found[place] = (state, state_score)
+        if place in known:
+            revisits += 1
+            if rng.random() < 1 / revisits:
+                revisit = (place, state)
+        if new:
+            gaps.append(stale + 1)
+            stale = 0
+        else:
             stale += 1
             if settings.stale_steps is not None and stale >= settings.stale_steps:
                 break
-        else:
-            found[place] = state
-            gaps.append(stale + 1)
-            stale = 0
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
+    if settings.keep == "empowerment":
+        found = {place: (state, empowered(emulator, rng, state)) for place, (state, _) in found.items()}
+        if revisit:
+            place, state = revisit
+            state_score = empowered(emulator, rng, state)
+            if state_score > known[place]:
+                found[place] = (state, state_score)
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps)
 
 
 def worker(connection, settings, seed):
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     rng = np.random.default_rng([seed, os.getpid()])
-    known = set()
+    known = {}
     while (task := connection.recv()) is not None:
-        start, start_state, new_places = task
-        known.update(new_places)
+        start, start_state, updates = task
+        known.update(updates)
         connection.send(explore(emulator, rng, settings, known, start, start_state))
 
 
@@ -106,13 +141,13 @@ class Explorers:
                            for _, worker_end in pipes]
         for process in self._processes:
             process.start()
-        self._places_sent = [0] * count
+        self._updates_sent = [0] * count
         self.count = count
 
-    def send(self, worker_index, start, start_state, places):
-        """places is the main process's full, append-only list of known places."""
-        self._connections[worker_index].send((start, start_state, places[self._places_sent[worker_index]:]))
-        self._places_sent[worker_index] = len(places)
+    def send(self, worker_index, start, start_state, updates):
+        """updates is the main process's full, append-only log of (place, score) updates."""
+        self._connections[worker_index].send((start, start_state, updates[self._updates_sent[worker_index]:]))
+        self._updates_sent[worker_index] = len(updates)
 
     def finished(self):
         """Blocks until at least one worker is done. Returns [(worker index, Segment)]."""
