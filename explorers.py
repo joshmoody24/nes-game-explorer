@@ -16,7 +16,7 @@ from multiprocessing.connection import wait
 import numpy as np
 
 from controls import ACTIONS, FRAMES_PER_STEP
-from emulator import Emulator
+from emulator import Emulator, button_mask
 from metroid import (CURRENT_MISSILES, ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES,
                      ROOM_X, ROOM_Y, area_of, at, energy_of)
 from progress import Progress
@@ -36,6 +36,9 @@ class Settings:
     # Each segment lowers its repeat probability by a random amount up to this, so some segments jitter: tapping
     # a button many times in a row (firing several shots) is near impossible when presses are long holds.
     repeat_spread: float = 0.0
+    # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
+    # in random play. Below 1, random play wastes missiles less often.
+    select_weight: float = 1.0
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
@@ -77,13 +80,15 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     """known: {place: path length of the kept state}."""
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
-    action = rng.integers(len(ACTIONS))
+    weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
+    probabilities = weights / weights.sum()
+    action = rng.choice(len(ACTIONS), p=probabilities)
     stale = 0
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
         if rng.random() > repeat_probability:
-            action = rng.integers(len(ACTIONS))
+            action = rng.choice(len(ACTIONS), p=probabilities)
         emulator.run(ACTIONS[action], FRAMES_PER_STEP)
         pressed.append(action)
         state = emulator.save()

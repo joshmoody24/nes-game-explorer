@@ -499,3 +499,19 @@ near the route is required, not a better route.
 - **Follower with remembered recoveries** (`chase.py ... --recovery-rounds 2`): 48K entries, every attempt
   stuck at waypoint 8/220 (vs median 43 without): a recovery entry near the route poisons a deterministic
   lookup. Parked: playback only matters once exploration can reach further.
+
+## 2026-11-25 (night): the wall is distance in place x inventory, not waste
+
+- **Long Beam red door** (map y 5, x 7; facts from the disassembly via a research agent: 5 missile hits,
+  beams don't count, opens for good): room (5,8) beside it is reached 80+ times in every run, **never with
+  a missile**; room (5,7) never entered.
+- **Causal test** (`python -m checks.red_door_check resources-15min 300`): 20 door states x 300 random
+  segments: 0% enter (5,7) as found; **0.18%** (11/6000) with 5 missiles edited in. Random play can open it
+  when armed.
+- **Frugal exploration** (diagnostic: SELECT combos 10x rarer, + resource places; `runs/frugal-15min`):
+  80 rooms, 60,948 places, 48 states at the door, all with 0 missiles. Wasting missiles is not why.
+- Conclusion: missiles come from far away (room 11,18); carrying them back means re-crossing territory that
+  is only "new" because of the inventory. Exploring place x inventory with uniform random segments is
+  multiplicative in items: hopeless for the whole game. Needed: composition, i.e. travel across known
+  territory with what you carry. Second-agent review agreed and added: playback needs re-planning, and timed
+  skills (bomb jumps, ice platforms) will need reusable action chunks.
