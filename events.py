@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-SMALLEST_SHARE, LARGEST_SHARE = 0.02, 0.98  # held by too few: junk; by nearly all: part of the layer itself
+SMALLEST_SHARE, LARGEST_SHARE = 0.02, 0.9  # held by too few: junk; by nearly all: part of the layer itself
 
 
 def find(emulator, run_dir):

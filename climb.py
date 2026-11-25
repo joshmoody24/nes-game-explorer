@@ -30,7 +30,7 @@ WORKERS = 16
 
 def explore(run_dir, minutes, start_file, keep_more="", workers=WORKERS):
     command = ["python", "go_explore.py", str(run_dir.relative_to("runs")), "--minutes", str(minutes),
-               "--workers", str(workers), "--record", "0.05"]
+               "--workers", str(workers), "--record", "0.05", "--stop-after-stall", "3"]
     if start_file:
         command += ["--start-state", str(start_file)]
     if keep_more:
@@ -40,7 +40,7 @@ def explore(run_dir, minutes, start_file, keep_more="", workers=WORKERS):
 
 def summary(run_dir):
     line = json.loads(open(run_dir / "metrics.jsonl").readlines()[-1])
-    return {k: line[k] for k in ["rooms", "areas", "items", "energy tanks", "max missiles", "bosses"]}
+    return {k: line[k] for k in ["frames", "rooms", "areas", "items", "energy tanks", "max missiles", "bosses"]}
 
 
 def main():
@@ -49,6 +49,7 @@ def main():
     parser.add_argument("--layer-minutes", type=float, default=12)
     parser.add_argument("--children", type=int, default=4, help="most child layers per layer")
     parser.add_argument("--layers", type=int, default=12, help="most layers in all")
+    parser.add_argument("--layer0", help="reuse this run as layer 0 instead of exploring from power-on")
     args = parser.parse_args()
     root = Path("runs") / args.name
     root.mkdir(parents=True, exist_ok=True)
@@ -56,13 +57,14 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
 
     started = time.perf_counter()
-    layer0 = root / "layer0"
-    process = explore(layer0, args.layer_minutes, None)
-    process.wait()
+    layer0 = Path("runs") / args.layer0 if args.layer0 else root / "layer0"
+    if not args.layer0:
+        explore(layer0, args.layer_minutes, None).wait()
     terms = spendables.detect(emulator, valid_recordings(layer0))
     print(f"layer0 [{time.perf_counter() - started:.0f}s]: {summary(layer0)}; spendables {terms}", flush=True)
     log.write(json.dumps({"layer": "layer0", "parent": None, "spendables": terms, "summary": summary(layer0)}) + "\n")
 
+    frames_total = summary(layer0)["frames"]
     seen_events = set()
     queue = deque([("layer0", [layer0])])
     count = 1
@@ -91,10 +93,12 @@ def main():
                          for b, term in zip(branches, terms)]
             for p in processes:
                 p.wait()
-            print(f"{name} from {branch.relative_to(root)} visit {holder} (event of {size} bits) "
+            print(f"{name} from {branch} visit {holder} (event of {size} bits) "
                   f"[{time.perf_counter() - layer_started:.0f}s]: " +
                   "; ".join(f"{b.name}: {summary(b)}" for b in branches), flush=True)
-            log.write(json.dumps({"layer": name, "parent": str(branch.relative_to(root)), "visit": holder,
+            frames_total += sum(summary(b)["frames"] for b in branches)
+            print(f"  frames emulated so far: {frames_total:,} ({frames_total / 60 / 3600:,.0f} hours of game time)", flush=True)
+            log.write(json.dumps({"layer": name, "frames so far": frames_total, "parent": str(branch), "visit": holder,
                                   "event_bits": size, "branches": {b.name: summary(b) for b in branches}}) + "\n")
             log.flush()
             queue.append((name, branches))
