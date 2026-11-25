@@ -46,3 +46,38 @@ the room, items, tanks, max missiles / 5).
 - "Background layouts seen" keeps rising while rooms are flat (scrolling within a room makes new
   layouts), so it can't distinguish a stall from progress; the Metroid room count can.
 - Checkpoints: ~2 KB per archived place compressed.
+
+## 2026-11-24: 30-minute hand-made-places baseline (`runs/baseline-30min`)
+
+18 workers, 855M frames (~478K frames/s), 8,551 places.
+
+| time | rooms | notes |
+|---|---|---|
+| 10 s | 10 | Morph Ball |
+| 70-80 s | 46-59 | first Missile Tank (max missiles 5); Norfair (verified by screenshots) |
+| 130 s | 77 | |
+| 6-10 min | 93 | plateau |
+| 12 min | 131 | |
+| 18-26 min | 143 | plateau |
+| 30 min | 151 | still only Morph Ball + 5 missiles; no Bombs, energy tanks or bosses |
+
+- Likely the red door that needs 5 missiles (the same wall Antithesis describes in
+  https://antithesis.com/blog/2025/metroid/): places count max missiles, not current missiles, so
+  "saved 5 missiles at the door" and "spent them" are the same place. Not yet confirmed.
+- Norfair states in the archive show EN 00-01: places ignore energy, so near-dead states are kept.
+
+## 2026-11-24: speed levers, round 1
+
+Races: `python race.py <name> <minutes> "<label>=<flags>" ...` (3 seeds x 6 workers each, run side by side).
+2.5 minutes at 6 workers is ~50 s of whole-machine time, so these races only cover the early game.
+
+- **Correction to the throughput table above:** `checks.benchmark` presses random buttons including
+  START, so the game is often paused, which is cheap to emulate. Real in-game emulation is ~39-44K
+  frames/s per process, ~480-500K across the machine, which Go-Explore already reaches (~478K).
+- Worker bookkeeping is now ~3-6% of worker time (`python -m checks.profile_worker`), after reading
+  place bytes through `Emulator.view()` instead of building the 10 KB memory array each step.
+  Raw speed is at its ceiling; further gains must come from wasting fewer frames.
+- Ending segments after 20 steps without a new place is much worse (5 vs 16 rooms in 1.5 min): 10% of
+  new places need 50+ steps of effort since the previous one, 1% need 94+ (measured over a 90 s run).
+- 300-step segments are slightly worse than 100 (15-17 vs 17-19 rooms, 880-970 vs 1000-1080 places,
+  all 3 seeds agreeing).

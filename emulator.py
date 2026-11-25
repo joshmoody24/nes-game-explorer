@@ -45,12 +45,18 @@ def state_blocks(state):
     return blocks
 
 
-def memory_of(state, cartridge_slice):
-    """System RAM followed by cartridge RAM, read out of a save state."""
-    blocks = state_blocks(state)
-    system_start, system_size = blocks["LRAM"]
-    return np.concatenate([np.frombuffer(state[system_start:system_start + system_size], np.uint8),
-                           np.frombuffer(state[cartridge_slice], np.uint8)])
+class MemoryView:
+    """
+    Single bytes of a save state's memory, indexed like Emulator.memory() (system RAM, then cartridge
+    RAM from 0x800), without building the 10 KB array. For hot loops that read a handful of bytes.
+    """
+    __slots__ = ("_state", "_system_start", "_cartridge_start")
+
+    def __init__(self, state, system_start, cartridge_start):
+        self._state, self._system_start, self._cartridge_start = state, system_start, cartridge_start
+
+    def __getitem__(self, index):
+        return self._state[self._system_start + index if index < 0x800 else self._cartridge_start + index - 0x800]
 
 
 def button_mask(*names):
@@ -100,6 +106,8 @@ class Emulator:
         blocks = state_blocks(self.save())
         if "SRAM" not in blocks:
             raise RuntimeError(f"Save states from {core_path} have no cartridge RAM block")
+        # Every state from this core and game has the same layout, so the offsets are found once.
+        self._system_slice = slice(blocks["LRAM"][0], sum(blocks["LRAM"]))
         self._cartridge_slice = slice(blocks["SRAM"][0], sum(blocks["SRAM"]))
         self._nametable_slice = slice(blocks["NTAB"][0], sum(blocks["NTAB"]))
 
@@ -135,7 +143,13 @@ class Emulator:
 
     def memory(self, state=None):
         """System RAM ($0000-$07FF) followed by cartridge RAM ($6000-$7FFF), as one uint8 array."""
-        return memory_of(state or self.save(), self._cartridge_slice)
+        state = state or self.save()
+        return np.concatenate([np.frombuffer(state[self._system_slice], np.uint8),
+                               np.frombuffer(state[self._cartridge_slice], np.uint8)])
+
+    def view(self, state):
+        """Like memory(state), but reads bytes on demand; much cheaper when only a few are needed."""
+        return MemoryView(state, self._system_slice.start, self._cartridge_slice.start)
 
     def nametable(self, state=None):
         """The background tile layout (2 KB), from a save state or the current one."""
