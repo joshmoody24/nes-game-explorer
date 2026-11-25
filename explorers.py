@@ -39,10 +39,11 @@ class Settings:
     # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
     # in random play. Below 1, random play wastes missiles less often.
     select_weight: float = 1.0
-    # A memory index (memory() numbering) whose higher value makes a place's state better, before path length:
+    # Memory indices (memory() numbering) whose higher total makes a place's state better, before path length:
     # keep the state that holds more of something random play only spends (one-way reachability: a state
-    # holding more can become one holding less, not back). None ranks by path length alone.
-    keep_more: int | None = None
+    # holding more can become one holding less, not back). Empty ranks by path length alone.
+    # Comma-separated "index:scale" (or "index"); a state holding a larger total of value / scale is kept.
+    keep_more: str = ""
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
@@ -85,7 +86,8 @@ WORST_RANK = (-np.inf, -np.inf)
 
 def rank(memory, path_length, settings):
     """How a place's candidate states compare (higher is kept): what they hold (see keep_more), then shorter paths."""
-    return (int(memory[settings.keep_more]) if settings.keep_more is not None else 0, -path_length)
+    return sum(int(memory[int(index)]) / float(scale or 1)
+               for index, _, scale in (item.partition(":") for item in settings.keep_more.split(",") if item)), -path_length
 
 
 def explore(emulator, rng, settings, known, start, start_state, start_path_length):

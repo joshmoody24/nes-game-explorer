@@ -556,3 +556,14 @@ spendables.
   variant). No entry beyond the door in 15 min.
 - Opening depends on height (`python -m checks.red_door_check resources-15min 300`, per state): all 11
   successes came from 3 states high in the room (room y 52-87), ~1-2% each; 17 lower states: 0/300.
+- **Long Beam!** Same setup run for 45 min (`runs/layer-keep-45min`): the Long Beam at **176 s**; then a
+  stall: 97 rooms, 16,875 places, 10 max missiles, no Bombs in the remaining 42 min. Hoarding only
+  missiles let energy run down everywhere (the best Long Beam state with 5+ missiles had 14 energy).
+- `--keep-more` now takes several "index:scale" terms, summed (hoard missiles and energy together).
+- **Finding spendables automatically** (`python -m checks.consumables_check policy-data`, 3000
+  recordings): "decreases far more often than increases, in small steps" puts missiles 27th and energy
+  (tens) 24th of ~10K bytes; also requiring persistence across scene changes doesn't help (the junk persists
+  too); requiring rare changes (< 0.2% of steps) lifts them to **10th and 11th**. A paired test (two
+  random plays from one state end different) separates missiles (4%) from most junk (0-1%) but not energy
+  (1%). Next: hoard the automatic top 12, each divided by its largest observed value, and see whether the
+  Long Beam still falls.
