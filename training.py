@@ -43,11 +43,11 @@ def device_data(experience):
             jnp.asarray(experience.observation_offsets), jnp.asarray(experience.action_offsets))
 
 
-def sample_on_device(key, data, size, max_gap=32, geometric_mean=None):
+def sample_on_device(key, data, size, max_gap=32, geometric_mean=None, with_next=False):
     """
     Random (observation, goal later in the same recording, action) triples, drawn on the accelerator.
     The goal is 1..max_gap steps ahead, uniformly, or geometrically with the given mean (near futures
-    likelier), truncated at the recording's end.
+    likelier), truncated at the recording's end. with_next adds the observation right after the action.
     """
     observations, actions, observation_offsets, action_offsets = data
     step_key, gap_key = jax.random.split(key)
@@ -60,6 +60,8 @@ def sample_on_device(key, data, size, max_gap=32, geometric_mean=None):
     else:
         gap = jnp.minimum(jax.random.geometric(gap_key, 1 / geometric_mean, (size,)), remaining).astype(jnp.int32)
     base = observation_offsets[recording] + t
+    if with_next:
+        return observations[base], observations[base + gap], actions[steps], observations[base + 1]
     return observations[base], observations[base + gap], actions[steps]
 
 

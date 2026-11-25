@@ -417,3 +417,12 @@ Short-trip success is not where big gains are; next is chaining trips from power
   player retrace detours): 132 -> 101 steps, about 6.7 s of game time. Still some dawdling.
 - Practice: from 1000 random route points knocked off by 0-15 random buttons, keep the fastest of 8
   attempts to rejoin 1-3 waypoints ahead (95-100% recover); retrain (hindsight) on teacher trips + these.
+
+## 2026-11-25: shorter route; advantage weighting
+
+- Shortening with the practiced player, 1000 attempts per round, spacings 100..20: 101 -> **67 steps**
+  (~4.5 s of game time; first 132). `python route.py policy-data --resume --player ... --attempts 1000`.
+- Practice on the 67-step route (1000 knocked-off starts, 993 recovered, 450K emulator steps), then two
+  players on identical data (`python practice.py policy-data --compare --player ...`), Test B, 100 attempts:
+  plain hindsight **63%**, advantage-weighted (learned distance, AWR, temperature 1) **51%**. No gain; the
+  distance (trained on random play) is probably too noisy per step to grade single moves.

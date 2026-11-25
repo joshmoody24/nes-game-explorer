@@ -79,24 +79,36 @@ def main():
     parser.add_argument("run")
     parser.add_argument("--target", choices=TARGETS, default="morph")
     parser.add_argument("--teacher", default="cache/teacher-v2-policy-data-20000-20000-20000-4.pkl")
+    parser.add_argument("--player", help="a saved player (parameters, byte indices) instead of the distilled student")
+    parser.add_argument("--attempts", type=int, default=200)
+    parser.add_argument("--spacings", default="60,40,20,10")
+    parser.add_argument("--resume", action="store_true", help="shorten the saved route instead of stitching anew")
     args = parser.parse_args()
+    saved_route = Path("cache") / f"route-{args.run}-{args.target}.pkl"
 
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     states = route(emulator, args.run, args.target)
     params, byte_indices, _ = cached(Path("cache") / f"student-{Path(args.teacher).stem}.pkl",
                                      lambda: student(emulator, args.teacher))
+    if args.player:
+        params, byte_indices = pickle.loads(Path(args.player).read_bytes())
     player = policy.GoalPolicy(params, byte_indices)
-    start = states[0]
-    actions = stitch(emulator, start, [emulator.memory(s) for s in states[1:]], player)
-    if actions is None:
-        return
-    print(f"stitched a path of {len(actions)} steps through {len(states) - 1} archive waypoints", flush=True)
-    actions = shorten(emulator, start, actions, player)
+    if args.resume:
+        start, actions = pickle.loads(saved_route.read_bytes())
+        print(f"shortening the saved {len(actions)}-step route", flush=True)
+    else:
+        start = states[0]
+        actions = stitch(emulator, start, [emulator.memory(s) for s in states[1:]], player, attempts=args.attempts)
+        if actions is None:
+            return
+        print(f"stitched a path of {len(actions)} steps through {len(states) - 1} archive waypoints", flush=True)
+    actions = shorten(emulator, start, actions, player, spacings=[int(s) for s in args.spacings.split(",")],
+                      attempts=args.attempts)
     end = emulator.memory(replay(emulator, start, actions)[-1])
     print(f"final path: {len(actions)} steps; replayed, it ends with the target: {bool(TARGETS[args.target](end))}",
           flush=True)
     Path("cache").mkdir(exist_ok=True)
-    (Path("cache") / f"route-{args.run}-{args.target}.pkl").write_bytes(pickle.dumps((start, actions)))
+    saved_route.write_bytes(pickle.dumps((start, actions)))
     Path("videos").mkdir(exist_ok=True)
     video.record(emulator, start, actions, Path("videos") / f"route-{args.target}.mp4")
 

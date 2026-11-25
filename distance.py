@@ -10,8 +10,10 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+import policy
+from controls import ACTIONS
 from policy import features
-from training import TRAINING_DTYPE, CpuModel, device_data, fit, init_mlp, mlp
+from training import TRAINING_DTYPE, CpuModel, device_data, fit, init_mlp, mlp, sample_on_device
 
 HIDDEN = (512, 256)
 MAX_GAP = 64
@@ -64,3 +66,33 @@ def train(experience, key, updates=20000, batch=1024, log=print):
     params = init_mlp(init_key, (3 * len(experience.byte_indices), *HIDDEN, len(EDGES) + 1))
     return Distance(fit(loss, params, device_data(experience), key, updates, batch, sampler=sample_pairs, log=log),
                     experience.byte_indices)
+
+
+# Advantage-weighted imitation (Peng et al., "Advantage-Weighted Regression"): hindsight examples count
+# more when their button closed more of the distance to the goal than the batch usually does, so the player
+# learns what works best rather than whatever was done.
+ADVANTAGE_TEMPERATURE = 1.0
+MOST_WEIGHT = 20.0
+
+
+def sample_weighted(key, data, size):
+    *experience_data, judge_params = data
+    observations, goals, actions, nexts = sample_on_device(key, experience_data, size, with_next=True)
+    progress = expected_log_steps(judge_params, observations, goals) - expected_log_steps(judge_params, nexts, goals)
+    advantage = (progress - progress.mean()) / (progress.std() + 1e-6)
+    weights = jnp.minimum(jnp.exp(advantage / ADVANTAGE_TEMPERATURE), MOST_WEIGHT)
+    return observations, goals, actions, jax.lax.stop_gradient(weights / weights.mean())
+
+
+def weighted_loss(params, observations, goals, actions, weights):
+    return jnp.mean(weights * optax.softmax_cross_entropy_with_integer_labels(
+        policy.logits(params, observations, goals, TRAINING_DTYPE), actions))
+
+
+def train_weighted_player(experience, judge, key, updates=30000, batch=512, log=print):
+    """A goal-reaching player (policy.GoalPolicy) trained with advantage weights from this distance."""
+    init_key, key = jax.random.split(key)
+    params = init_mlp(init_key, (3 * len(experience.byte_indices), *policy.HIDDEN, len(ACTIONS)))
+    data = (*device_data(experience), jax.device_put(judge.host_params()))
+    return policy.GoalPolicy(fit(weighted_loss, params, data, key, updates, batch, sampler=sample_weighted, log=log),
+                             experience.byte_indices)
