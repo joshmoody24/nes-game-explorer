@@ -527,3 +527,18 @@ door. First version: hops taken by the first chunk that works spent everything (
 energy). Keeping the arrival that holds the most (hand-given missiles, energy) preserved missiles but
 journeys still drained energy and bounced inside Norfair rooms until the re-planning limit. Fixing hops
 one by one is hill-climbing on map details; parked in favor of restarting exploration per acquisition.
+
+## 2026-11-25 (night): exploration layers from the first missiles (`--start-state`)
+
+Fresh exploration from a state just after the first missile pickup (room 11,18; 5 missiles, 36 energy;
+`cache/start-first-missiles.state`), 15 min each:
+- resource places (missiles + energy bands): 52 rooms, 54,648 places; never reached the door's row.
+- plain places: **88 rooms** (most of the night), 5,156 places; door room (5,8) reached 44 times, all with
+  0 missiles. Random play spends the 5 missiles on the long walk back, even when every lineage starts
+  armed.
+- plain places + frugal play (SELECT 10x rarer): **94 rooms** (most of the night), 7,532 places; door room
+  reached 86 times, all with 0 missiles. The seed starts with missile mode off (B alone fires nothing), but
+  a rare SELECT leaves missile mode on for hundreds of steps, so the walk back drains them anyway.
+- Conclusion for the night: every random-exploration variant (resource places, frugal, fresh layers, map
+  travel) delivers the Long Beam door empty-handed. Carrying a resource across known territory to where it
+  is needed requires deliberate behavior; random play with save states does not provide it.
