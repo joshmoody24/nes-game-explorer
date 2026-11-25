@@ -252,3 +252,13 @@ gfx110X-all, ~1.4 GB; the older gfx110X-dgpu folder stopped at 7.10), which also
 `python -m checks.train_speed_check 512 1000`): ~460 updates/s at batch 512 vs PyTorch's 767.
 Caveat: nightly wheels may disappear from AMD's index; the pinned hashes keep builds reproducible while
 the files are in the store. Stable 7.13.0 exists on repo.amd.com/rocm/whl/gfx110X-all.
+
+## 2026-11-25: JAX training at PyTorch speed
+
+Steady-state, synthetic data shaped like the real thing (`python -m checks.train_speed_check 512 1000`),
+batch 512: ~460 updates/s -> 639 after dropping the redundant goal-minus-observation input (the first
+layer is linear, so it adds nothing; 9,240 -> 6,160 inputs) -> 955 with bfloat16 matrix multiplies
+(float32 parameters and accumulation). PyTorch's eager fp32 reference was 767; at equal precision JAX is
+~83% of it. Quality unchanged (Test A: held-out loss 2.438 vs 2.46 before; trips 58% vs 55-60%).
+bfloat16 is for training only: on the CPU, where the player acts, it made a decision 415 us vs 153 us
+in float32. Building training data by replay (~9,400 steps/s, one process) is now the slowest stage.

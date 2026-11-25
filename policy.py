@@ -25,21 +25,30 @@ def init_params(key, inputs, outputs):
             for k, a, b in zip(keys, sizes[:-1], sizes[1:])]
 
 
-def features(observations, goals):
-    """Observation, goal, and their difference, as floats in [-1, 1]."""
-    current, target = observations.astype(jnp.float32) / 255, goals.astype(jnp.float32) / 255
-    return jnp.concatenate([current, target, target - current], -1)
+# Matrix multiplies run in `dtype` and accumulate in float32; parameters stay float32. bfloat16 is
+# ~1.5x faster to train on the GPU at no loss in quality, but CPUs emulate it slowly, so acting uses float32.
+TRAINING_DTYPE = jnp.bfloat16
 
 
-def logits(params, observations, goals):
-    x = features(observations, goals)
+def features(observations, goals, dtype):
+    """Observation and goal as floats in [0, 1]. (A goal-minus-observation input would add nothing: the
+    first layer is linear, so it can already weigh the two against each other.)"""
+    return jnp.concatenate([observations, goals], -1).astype(dtype) / 255
+
+
+def dense(x, layer, dtype):
+    return jnp.dot(x, layer["w"].astype(dtype), preferred_element_type=jnp.float32) + layer["b"]
+
+
+def logits(params, observations, goals, dtype=jnp.float32):
+    x = features(observations, goals, dtype)
     for layer in params[:-1]:
-        x = jax.nn.relu(x @ layer["w"] + layer["b"])
-    return x @ params[-1]["w"] + params[-1]["b"]
+        x = jax.nn.relu(dense(x, layer, dtype)).astype(dtype)
+    return dense(x, params[-1], dtype)
 
 
-def loss(params, observations, goals, actions):
-    return optax.softmax_cross_entropy_with_integer_labels(logits(params, observations, goals), actions).mean()
+def loss(params, observations, goals, actions, dtype=jnp.float32):
+    return optax.softmax_cross_entropy_with_integer_labels(logits(params, observations, goals, dtype), actions).mean()
 
 
 def sample_batch(rng, experience, size):
@@ -74,7 +83,7 @@ def _train_chunk(params, optimizer_state, key, data, updates, batch):
     """Many updates in one compiled call, so the accelerator never waits on Python."""
     def update(carry, key):
         params, optimizer_state = carry
-        value, grads = jax.value_and_grad(loss)(params, *sample_on_device(key, data, batch))
+        value, grads = jax.value_and_grad(loss)(params, *sample_on_device(key, data, batch), TRAINING_DTYPE)
         changes, optimizer_state = OPTIMIZER.update(grads, optimizer_state, params)
         return (optax.apply_updates(params, changes), optimizer_state), value
 
@@ -114,7 +123,7 @@ _logits = jax.jit(logits)
 def train(experience, key, updates=5000, batch=512, chunk=1000, log=print):
     """Trains on the default device (the GPU when there is one), with the whole dataset copied there once."""
     init_key, key = jax.random.split(key)
-    params = init_params(init_key, 3 * len(experience.byte_indices), len(ACTIONS))
+    params = init_params(init_key, 2 * len(experience.byte_indices), len(ACTIONS))
     optimizer_state = OPTIMIZER.init(params)
     data = tuple(map(jnp.asarray, (experience.observations, experience.actions,
                                    experience.observation_offsets, experience.action_offsets)))
