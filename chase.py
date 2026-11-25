@@ -76,6 +76,9 @@ def main():
     parser.add_argument("--per-hop", action="store_true")
     parser.add_argument("--player", help="a saved player (parameters, byte indices) instead of the distilled student")
     parser.add_argument("--follower", action="store_true", help="play the route with route.Follower (no learning)")
+    parser.add_argument("--recovery-rounds", type=int, default=0,
+                        help="rounds of practice whose best recoveries the follower remembers")
+    parser.add_argument("--recovery-starts", type=int, default=1000)
     parser.add_argument("--route", help="a stitched route (see route.py) to take waypoints from, instead of the archive")
     parser.add_argument("--archive-path", action="store_true",
                         help="take waypoints from the archive's stored shortest path to the target")
@@ -100,10 +103,16 @@ def main():
     player = policy.GoalPolicy(params, byte_indices)
     if args.follower:
         import route as routes
-        follower_actions = np.frombuffer(actions, np.uint8)
-        player = routes.Follower((np.stack([emulator.memory(s)[byte_indices] for s in path]),
-                                  np.append(follower_actions, 0)),
-                                 byte_indices)
+        memory = routes.route_memory(emulator, path, actions, byte_indices, args.spacing)
+        player = routes.Follower(memory, byte_indices)
+        rng = np.random.default_rng(1)
+        for round_number in range(args.recovery_rounds):
+            *entries, steps_spent = routes.recoveries(emulator, path, player, rng, args.spacing,
+                                                      starts=args.recovery_starts)
+            memory = routes.with_entries(memory, *entries)
+            player = routes.Follower(memory, byte_indices)
+            print(f"recovery round {round_number}: +{len(entries[1])} memory entries ({len(memory[1])} total), "
+                  f"{steps_spent:,} emulator steps", flush=True)
     videos = Path("videos")
     videos.mkdir(exist_ok=True)
     if args.per_hop:

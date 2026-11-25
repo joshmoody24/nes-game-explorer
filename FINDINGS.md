@@ -463,3 +463,39 @@ Independent review (second agent) points: the learned parts only follow routes t
   `improve.py` and their checks (all logged failures; in git history). Deferred until the path-follower
   results settle what survives: players as values with one interface, injected success test, one worker
   system, one path concept.
+
+## 2026-11-25 (night): following archive paths; compounding
+
+`runs/paths-15min` (shortest-path archive, 15 min): 87 rooms, Morph Ball, 10 max missiles, Norfair;
+300/300 sampled paths replay. Shortest stored paths: Morph Ball 58 steps, missiles 2192 steps.
+
+| follower on the archive path (100 attempts, sticky 0.25) | reached |
+|---|---|
+| Morph Ball (6 waypoints) | 60% (vs 92% on the 67-step stitched route) |
+| missiles (220 waypoints) | 0%; median 43/220 waypoints, best 93; 20% died |
+| same, follower searching only the 30 states before its waypoint | 0%; median 27/220; 4% died |
+
+Per hop (30 attempts each, from the path's own state): most hops 87-100%, only 2 of 220 under 50%, yet
+the product over all hops is ~0. Failure is spread thin: a single route followed closely compounds to zero
+over long horizons (99%/hop over 220 hops = 11%; the game is ~50x longer). Shortening the 2192-step path
+with the student got stuck (it never learned that territory). A player that can recover from anywhere
+near the route is required, not a better route.
+
+## 2026-11-25 (night): the exploration wall is not resources or budget
+
+- **Resource-aware places** (hand-given diagnostic: current missiles + energy bands; `runs/resources-15min`,
+  15 min): 49,448 places (6x), 77 rooms, Morph Ball, 10 max missiles; nothing new. Wall unchanged.
+- **Budget?** (`python -m checks.armed_check resources-15min 3000 10`): 30,000 random segments from 3,000
+  states holding 5+ missiles: **0** reached a new room, item, area or missile capacity. Not a selection
+  budget problem; the explored region is saturated for random play.
+- **Frontier** (`python -m checks.frontier_check`): 14 room edges face unvisited map cells; nearly every
+  state there has 2-3 energy and 10 of 14 never held a missile. New territory is only reached by
+  lineages that spent everything.
+- **Transport** (`python -m checks.transport_check`): carrying the strongest state on a door's stored path
+  to the door with the follower (best of 50 per hop, save states allowed) worked for 3 doors (5-9
+  missiles, 23-36 energy at the edge): **0 of 600** random segments from there reached anything new.
+  A scripted probe (switch to missiles, shoot, walk through) at one such edge didn't pass either: unclear
+  whether these edges are real passages; asked a research agent for the game's layout facts.
+- **Follower with remembered recoveries** (`chase.py ... --recovery-rounds 2`): 48K entries, every attempt
+  stuck at waypoint 8/220 (vs median 43 without): a recovery entry near the route poisons a deterministic
+  lookup. Parked: playback only matters once exploration can reach further.

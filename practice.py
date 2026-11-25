@@ -29,18 +29,6 @@ from experience import build
 from explorers import ROM
 
 
-def knocked_off(emulator, path, rng, count, most_random_steps):
-    """(start state, index of the route state it was knocked off from) for count random points."""
-    starts = []
-    for _ in range(count):
-        index = int(rng.integers(len(path) - 1))
-        emulator.load(path[index])
-        for _ in range(int(rng.integers(most_random_steps + 1))):
-            emulator.run(ACTIONS[int(rng.integers(len(ACTIONS)))], FRAMES_PER_STEP)
-        starts.append((emulator.save(), index))
-    return starts
-
-
 def lessons(emulator, path, player, rng, starts, tries, spacing=10, ahead=3, budget=60, most_random_steps=15):
     """
     (recordings, emulator steps spent): recordings (start state, buttons) of the fastest recovery from each
@@ -48,7 +36,7 @@ def lessons(emulator, path, player, rng, starts, tries, spacing=10, ahead=3, bud
     """
     memories = [emulator.memory(s) for s in path]
     recorded, attempts = [], []
-    starting_points = knocked_off(emulator, path, rng, starts, most_random_steps)
+    starting_points = routes.knocked_off(emulator, path, rng, starts, most_random_steps)
     for start, index in starting_points:
         targets = memories[index + spacing::spacing][:ahead] or [memories[-1]]
         attempts.append([trips.Trip(start, targets[-1], budget, "learned", seed=int(rng.integers(2**31)),

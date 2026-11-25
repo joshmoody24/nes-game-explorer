@@ -13,30 +13,101 @@ from controls import ACTIONS, FRAMES_PER_STEP
 
 class Follower:
     """
-    Plays a route without learning: finds the route state most like the current one (most chosen bytes
-    equal) and presses the button the route pressed there. Same interface as the trained players
-    (model(memories, goal_memories) -> [rows, buttons] scores). When a goal is a state on the route, only the
-    window route states before it are searched: routes revisit similar spots, and a match from another
-    part of the route presses the wrong button here.
+    Plays from memory, without learning. Each memory entry is (observation, button pressed, target), where
+    target is the route index of the waypoint that entry was heading to. Given a goal waypoint, it takes the
+    entries heading there, finds the one most like the current state (most chosen bytes equal) and presses
+    its button. Entries come from the route itself (see route_memory) and from remembered recoveries (see
+    recoveries), so a player knocked off the route still finds a nearby memory. Same interface as the
+    trained players: model(memories, goal_memories) -> [rows, buttons] scores.
     """
 
-    def __init__(self, params, byte_indices, window=30):
-        self.observations, self.actions = params
+    def __init__(self, params, byte_indices):
+        (self.observations, self.actions, self.targets,
+         self.waypoint_observations, self.waypoint_indices) = params
         self.byte_indices = byte_indices
-        self.window = window
+        self.heading_to = {int(t): np.flatnonzero(self.targets == t) for t in np.unique(self.targets)}
+        self.everything = np.arange(len(self.actions))
 
     def host_params(self):
-        return self.observations, self.actions
+        return (self.observations, self.actions, self.targets, self.waypoint_observations, self.waypoint_indices)
 
-    def _nearest(self, observation, goal):
-        on_route = np.flatnonzero((self.observations == goal).all(1))
-        end = on_route[0] + 1 if len(on_route) else len(self.observations)
-        begin = max(0, end - self.window) if len(on_route) else 0
-        return begin + int((self.observations[begin:end] == observation).sum(1).argmax())
+    def _entries(self, goal):
+        match = np.flatnonzero((self.waypoint_observations == goal).all(1))
+        return self.heading_to.get(int(self.waypoint_indices[match[0]]), self.everything) if len(match) else self.everything
 
     def __call__(self, memories, goal_memories):
-        nearest = [self._nearest(m[self.byte_indices], g[self.byte_indices]) for m, g in zip(memories, goal_memories)]
-        return np.eye(len(ACTIONS))[self.actions[np.minimum(nearest, len(self.actions) - 1)]]
+        buttons = []
+        for memory, goal in zip(memories, goal_memories):
+            entries = self._entries(goal[self.byte_indices])
+            similarity = (self.observations[entries] == memory[self.byte_indices]).sum(1)
+            buttons.append(self.actions[entries[similarity.argmax()]])
+        return np.eye(len(ACTIONS))[buttons]
+
+
+def waypoint_indices(path_length, spacing):
+    """Route indices of the waypoints on a path of path_length states: every spacing steps, and the end."""
+    return list(range(spacing, path_length - 1, spacing)) + [path_length - 1]
+
+
+def route_memory(emulator, path, actions, byte_indices, spacing):
+    """Follower parameters for a route alone: each route state heads to the next waypoint after it."""
+    waypoints = np.array(waypoint_indices(len(path), spacing))
+    observations = np.stack([emulator.memory(s)[byte_indices] for s in path])
+    targets = waypoints[np.searchsorted(waypoints, np.arange(len(path) - 1), side="right")]
+    return (observations[:-1], np.frombuffer(bytes(actions), np.uint8), targets,
+            observations[waypoints], waypoints)
+
+
+def with_entries(params, observations, actions, targets):
+    """Follower parameters with more memory entries."""
+    old_observations, old_actions, old_targets, waypoint_observations, waypoints = params
+    return (np.concatenate([old_observations, observations]), np.concatenate([old_actions, actions]),
+            np.concatenate([old_targets, targets]), waypoint_observations, waypoints)
+
+
+def knocked_off(emulator, path, rng, count, most_random_steps):
+    """(start state, index of the route state it was knocked off from) for count random points."""
+    starts = []
+    for _ in range(count):
+        index = int(rng.integers(len(path) - 1))
+        emulator.load(path[index])
+        for _ in range(int(rng.integers(most_random_steps + 1))):
+            emulator.run(ACTIONS[int(rng.integers(len(ACTIONS)))], FRAMES_PER_STEP)
+        starts.append((emulator.save(), index))
+    return starts
+
+
+def recoveries(emulator, path, follower, rng, spacing, starts=1000, tries=8, ahead=3, budget=60, most_random_steps=15):
+    """
+    (observations, buttons, targets, emulator steps spent): memory entries from the best of `tries`
+    follower attempts to rejoin the route from each of `starts` route points knocked off by random buttons.
+    """
+    waypoints = waypoint_indices(len(path), spacing)
+    groups = []
+    for start, index in knocked_off(emulator, path, rng, starts, most_random_steps):
+        heading = [w for w in waypoints if w > index][:ahead]
+        targets = [emulator.memory(path[w]) for w in heading]
+        groups.append((start, heading, [trips.Trip(start, targets[-1], budget, "learned-greedy",
+                                                   seed=int(rng.integers(2**31)), waypoints=tuple(targets[:-1]))
+                                        for _ in range(tries)]))
+    outcomes = trips.run([t for _, _, group in groups for t in group], follower)
+    observations, buttons, target_indices = [], [], []
+    for g, (start, heading, _) in enumerate(groups):
+        useful = [o for o in outcomes[g * tries:(g + 1) * tries] if o.targets_reached]
+        if not useful:
+            continue
+        best = max(useful, key=lambda o: (o.targets_reached, -o.progress_steps[-1]))
+        pressed = np.frombuffer(best.actions[:best.progress_steps[-1]], np.uint8)
+        states = replay(emulator, start, pressed)[:-1]
+        bounds = (0, *best.progress_steps)
+        for (begin, end), reached in zip(zip(bounds[:-1], bounds[1:]), best.progress_targets):
+            observations += [emulator.memory(s)[follower.byte_indices] for s in states[begin:end]]
+            buttons += list(pressed[begin:end])
+            target_indices += [heading[reached]] * (end - begin)
+    steps_spent = sum(len(o.actions) for o in outcomes) + starts * most_random_steps // 2
+    if not buttons:
+        return np.zeros((0, len(follower.byte_indices)), np.uint8), np.zeros(0, np.uint8), np.zeros(0, int), steps_spent
+    return np.stack(observations), np.array(buttons, np.uint8), np.array(target_indices), steps_spent
 
 
 def replay(emulator, start, actions):

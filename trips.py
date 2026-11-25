@@ -46,6 +46,7 @@ class Outcome:
     search_scores: np.ndarray | None  # search players: [steps, buttons] how good each button looked (higher better)
     targets_reached: int  # waypoints and goal reached
     progress_steps: tuple  # steps taken each time the trip reached a waypoint or the goal
+    progress_targets: tuple  # which target (index into waypoints + goal) each of those times reached
     died: bool  # evaluation only: game over
 
 
@@ -128,6 +129,7 @@ def _run_chunk(task):
     search_scores = [[] for _ in chunk]
     current = [0] * len(chunk)  # index of the target each trip is heading for
     progress_steps = [[] for _ in chunk]
+    progress_targets = [[] for _ in chunk]
     steps_on_target = [0] * len(chunk)
     died = [False] * len(chunk)
     learned = any(trip.player.startswith("learned") for trip in chunk)
@@ -170,10 +172,11 @@ def _run_chunk(task):
             if matched:
                 current[i], steps_on_target[i] = matched[-1] + 1, 0
                 progress_steps[i].append(len(pressed[i]))
+                progress_targets[i].append(matched[-1])
     return [Outcome(n == len(t), f, 0.0 if n == len(t) else c, bytes(p), bytes(h),
-                    np.array(s, np.float32) if s else None, n, tuple(g), d)
-            for n, t, f, c, p, h, s, g, d in zip(current, targets, first, closest, pressed, chosen, search_scores,
-                                                 progress_steps, died)]
+                    np.array(s, np.float32) if s else None, n, tuple(g), tuple(r), d)
+            for n, t, f, c, p, h, s, g, r, d in zip(current, targets, first, closest, pressed, chosen, search_scores,
+                                                    progress_steps, progress_targets, died)]
 
 
 def run(trips, model=None, byte_indices=None, search_hold=2):
