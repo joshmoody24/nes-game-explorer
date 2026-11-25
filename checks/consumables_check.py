@@ -19,11 +19,12 @@ from experience import build, valid_recordings
 from explorers import ROM
 from metroid import CURRENT_MISSILES, at
 
+PLAY_STEPS = 120
 NAMED = {"missiles": at(CURRENT_MISSILES), "energy (tens)": 0x107, "energy (units)": 0x106}
 
 
 def _paired(task):
-    """In a worker: for each state, which memory bytes end up different after two random 30-step plays."""
+    """In a worker: for each state, which memory bytes end up different after two random plays."""
     states, seed = task
     emulator, rng = workers.emulator(), np.random.default_rng(seed)
     differs = []
@@ -31,7 +32,7 @@ def _paired(task):
         ends = []
         for _ in range(2):
             emulator.load(state)
-            for _ in range(30):
+            for _ in range(PLAY_STEPS):
                 emulator.run(ACTIONS[int(rng.integers(len(ACTIONS)))], FRAMES_PER_STEP)
             ends.append(emulator.memory())
         differs.append(ends[0] != ends[1])
@@ -61,6 +62,9 @@ def main():
     starts = [state for state, _ in recordings[:2000]]
     chunks = [starts[i:i + 50] for i in range(0, len(starts), 50)]
     controllable = np.mean([d for result in workers.map(_paired, [(c, k) for k, c in enumerate(chunks)]) for d in result], 0)
+    print("before requiring dependence on play: missiles rank", int(np.flatnonzero(np.argsort(-score) == 4217)[0]),
+          "energy rank", int(np.flatnonzero(np.argsort(-score) == 263)[0]))
+    score = np.where(controllable >= 0.02, score, 0)
     ranked = np.argsort(-score)
     names = {index: name for name, index in NAMED.items()}
     print("top 20 (index: decreases/increases per step):")

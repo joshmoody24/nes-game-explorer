@@ -567,3 +567,17 @@ spendables.
   random plays from one state end different) separates missiles (4%) from most junk (0-1%) but not energy
   (1%). Next: hoard the automatic top 12, each divided by its largest observed value, and see whether the
   Long Beam still falls.
+
+## 2026-11-25 (midday): layer 2 gets Bombs; generic hoarding needs precision
+
+- **Layer 2** from the strongest Long Beam state with 5+ missiles (7 missiles, 14 energy;
+  `cache/start-long-beam.state`), hoarding missiles + energy tens (`--keep-more 4217,263`), 30 min
+  (`runs/layer2-keep-30min`): **193 rooms, Brinstar + Norfair + Kraid, Bombs, Long Beam, 1 energy tank,
+  15 max missiles**. Second red door opened. Twice the rooms of any earlier run.
+- **Generic hoarding, automatic top 12** (two seeds, 15 min from the first missiles): 114 / 119 rooms, an
+  energy tank, **no Long Beam**. The door room's states hold 0-2 missiles (hand hoarding: 5-10): missiles
+  are 1 of 12 summed terms, so the junk bytes decide what is kept. Hand hoarding of missiles alone, in turn,
+  left median energy at 1-2; generic hoarding kept it at 13-21.
+- Detector precision: requiring that two random 120-step plays from one state end with the byte different
+  in at least 2% of states lifts **energy (tens) to 2nd and missiles to 3rd** (behind bytes 35 and 40).
+  Running: generic hoarding with the automatic top 4 (35, 40, energy tens, missiles), two seeds.
