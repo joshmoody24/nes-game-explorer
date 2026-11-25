@@ -4,6 +4,7 @@ Shared pieces for training small networks on recorded experience on the accelera
 updates per compiled call so the accelerator never waits on Python.
 """
 
+from dataclasses import dataclass
 from functools import partial
 
 import jax
@@ -89,6 +90,24 @@ def fit(loss, params, experience, key, updates, batch, sampler=sample_on_device,
     return params
 
 
-def host_params(params):
-    """Parameters as plain NumPy arrays, for sending to other processes."""
-    return jax.tree.map(np.asarray, params)
+@dataclass
+class CpuModel:
+    """
+    A trained model evaluated on the CPU, in batches: model(memories, goal_memories) -> one result per row,
+    from full-memory snapshots. Subclasses set `evaluate`, a jitted (params, observations, goals) -> results.
+    The CPU, because decisions come a few at a time during play, too few for a GPU's launch overhead.
+    """
+    params: object
+    byte_indices: np.ndarray
+
+    def __post_init__(self):
+        self.params = jax.device_put(self.params, CPU)
+
+    def host_params(self):
+        """Parameters as plain NumPy arrays, for sending to other processes."""
+        return jax.tree.map(np.asarray, self.params)
+
+    def __call__(self, memories, goal_memories):
+        with jax.default_device(CPU):
+            return np.asarray(self.evaluate(self.params, jnp.asarray(memories[:, self.byte_indices]),
+                                            jnp.asarray(goal_memories[:, self.byte_indices])))

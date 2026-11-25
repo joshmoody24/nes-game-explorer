@@ -5,15 +5,13 @@ classification over coarse step buckets. Game-agnostic: the same raw-memory inpu
 With emulator lookahead it judges which button gets closest to a goal (see trips._searched).
 """
 
-from dataclasses import dataclass
-
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
 from policy import features
-from training import CPU, TRAINING_DTYPE, fit, host_params, init_mlp, mlp
+from training import TRAINING_DTYPE, CpuModel, fit, init_mlp, mlp
 
 HIDDEN = (512, 256)
 MAX_GAP = 64
@@ -52,28 +50,13 @@ def loss(params, observations, goals, buckets):
 
 
 @jax.jit
-def _expected_log_steps(params, observations, goal):
-    probabilities = jax.nn.softmax(logits(params, observations, jnp.broadcast_to(goal, observations.shape)))
-    return probabilities @ LOG_CENTERS
+def expected_log_steps(params, observations, goals):
+    return jax.nn.softmax(logits(params, observations, goals)) @ LOG_CENTERS
 
 
-@dataclass
-class Distance:
-    """Evaluates on the CPU, like the players."""
-    params: list
-    byte_indices: np.ndarray
-
-    def __post_init__(self):
-        self.params = jax.device_put(self.params, CPU)
-
-    def host_params(self):
-        return host_params(self.params)
-
-    def __call__(self, memories, goal_memory):
-        """Expected log(1 + steps) from each full-memory state in memories to the goal."""
-        with jax.default_device(CPU):
-            return np.asarray(_expected_log_steps(self.params, jnp.asarray(memories[:, self.byte_indices]),
-                                                  jnp.asarray(goal_memory[self.byte_indices])))
+class Distance(CpuModel):
+    """distance(memories, goal_memories) -> expected log(1 + steps) from each state to its goal."""
+    evaluate = staticmethod(expected_log_steps)
 
 
 def train(experience, key, updates=20000, batch=1024, log=print):

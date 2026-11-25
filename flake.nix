@@ -24,6 +24,9 @@
         # Allocate GPU memory as needed rather than 75% per process up front, and never above 90%.
         XLA_PYTHON_CLIENT_PREALLOCATE = "false";
         XLA_PYTHON_CLIENT_MEM_FRACTION = "0.9";
+        # Compiled training and evaluation code is kept on disk, saving ~4 s per model on each later run.
+        JAX_COMPILATION_CACHE_DIR = "/home/josh/.cache/metroid-explorer-jax";
+        JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS = "0.5";
       };
     };
 }

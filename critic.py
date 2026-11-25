@@ -6,16 +6,13 @@ pick out its real future among the other futures in the batch. Acting picks the 
 rather than imitating whichever interchangeable button random play happened to press. Game-agnostic.
 """
 
-from dataclasses import dataclass
-from functools import partial
-
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
 from controls import ACTIONS
-from training import CPU, TRAINING_DTYPE, fit, host_params, init_mlp, mlp, sample_on_device
+from training import TRAINING_DTYPE, CpuModel, fit, init_mlp, mlp, sample_on_device
 
 HIDDEN = (512, 256)
 EMBEDDING = 64
@@ -42,32 +39,17 @@ def sample(key, data, size):
 
 
 @jax.jit
-def _button_scores(params, observation, goal):
-    observations = jnp.repeat(observation[None], len(ACTIONS), 0)
-    return embed_state_action(params, observations, jnp.arange(len(ACTIONS))) @ embed_goal(params, goal[None])[0]
+def button_scores(params, observations, goals):
+    """[rows, buttons]: how well each button's predicted future matches the goal."""
+    rows = len(observations)
+    pairs = embed_state_action(params, jnp.repeat(observations, len(ACTIONS), 0),
+                               jnp.tile(jnp.arange(len(ACTIONS)), rows))
+    return jnp.einsum("rbe,re->rb", pairs.reshape(rows, len(ACTIONS), -1), embed_goal(params, goals))
 
 
-@dataclass
-class Critic:
-    """Acts on the CPU, like GoalPolicy."""
-    params: dict
-    byte_indices: np.ndarray
-
-    def __post_init__(self):
-        self.params = jax.device_put(self.params, CPU)
-
-    def host_params(self):
-        return host_params(self.params)
-
-    def act(self, memory, goal_memory, rng, temperature=0.0):
-        """The button whose predicted future best matches the goal. Temperature > 0 samples instead."""
-        with jax.default_device(CPU):
-            scores = np.asarray(_button_scores(self.params, jnp.asarray(memory[self.byte_indices]),
-                                               jnp.asarray(goal_memory[self.byte_indices])))
-        if temperature == 0:
-            return int(scores.argmax())
-        probabilities = np.exp((scores - scores.max()) / temperature)
-        return int(rng.choice(len(ACTIONS), p=probabilities / probabilities.sum()))
+class Critic(CpuModel):
+    """critic(memories, goal_memories) -> [rows, buttons] scores."""
+    evaluate = staticmethod(button_scores)
 
 
 def train(experience, key, updates=20000, batch=1024, log=print):

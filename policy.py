@@ -7,7 +7,6 @@ Its ceiling: only ~7.5 of the 25 button combos differ in effect at a given momen
 random play press?" is mostly unanswerable, and imitating it gives a blurry player (see critic.py).
 """
 
-from dataclasses import dataclass
 from functools import partial
 
 import jax
@@ -16,7 +15,7 @@ import numpy as np
 import optax
 
 from controls import ACTIONS
-from training import CPU, TRAINING_DTYPE, device_data, fit, host_params, init_mlp, mlp, sample_on_device
+from training import TRAINING_DTYPE, CpuModel, device_data, fit, init_mlp, mlp, sample_on_device
 
 HIDDEN = (512, 256)
 
@@ -39,30 +38,9 @@ def loss(params, observations, goals, actions):
         logits(params, observations, goals, TRAINING_DTYPE), actions).mean()
 
 
-_logits = jax.jit(logits)
-
-
-@dataclass
-class GoalPolicy:
-    """Acts on the CPU: one decision at a time is too small for a GPU, where launch overhead dominates."""
-    params: list
-    byte_indices: np.ndarray
-
-    def __post_init__(self):
-        self.params = jax.device_put(self.params, CPU)
-
-    def host_params(self):
-        return host_params(self.params)
-
-    def act(self, memory, goal_memory, rng, temperature=1.0):
-        """A button index for the full-memory current state and goal. Temperature 0 picks the most likely."""
-        with jax.default_device(CPU):
-            scores = np.asarray(_logits(self.params, jnp.asarray(memory[self.byte_indices][None]),
-                                        jnp.asarray(goal_memory[self.byte_indices][None])))[0]
-        if temperature == 0:
-            return int(scores.argmax())
-        probabilities = np.exp((scores - scores.max()) / temperature)
-        return int(rng.choice(len(ACTIONS), p=probabilities / probabilities.sum()))
+class GoalPolicy(CpuModel):
+    """policy(memories, goal_memories) -> [rows, buttons] logits."""
+    evaluate = staticmethod(jax.jit(logits))
 
 
 @partial(jax.jit, static_argnames=["size", "shuffle_goals"])

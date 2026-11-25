@@ -321,3 +321,26 @@ Same 600 held-out trips (random 42%, exact replay 92%, imitation player 62%).
   0/1/2-3/4-7/8-15/16-31/32-64/far; pairs 0-64 steps apart in a recording plus 25% from other recordings;
   20K recordings, 20K updates): search with it (hold 4) reaches **71%** of trips, closing 87% of the
   distance, vs 60% for matching bytes and 83% for the true distance. Best generic result so far.
+
+## 2026-11-25: iteration speed (`python -m checks.stage_timing_check policy-data`)
+
+| stage (4K recordings, 200 trips) | before | after |
+|---|---|---|
+| choose bytes | 6.0s | 3.3s (incl. starting the worker pool once) |
+| sample 200 trips | 2.8s | 0.2s |
+| build 4K recordings | 6.3s | 4.0s |
+| train player / distance, 5K updates | 11.9 / 16.4s | 7.6 / 11.8s |
+| 200 random / learned / search-learned trips | 2.4 / 12.5 / 13.2s | 0.1 / 0.9 / 4.5s |
+
+Causes, each measured before fixing:
+- Trip workers launched one after another (ready 0.4 s to 8.3 s): the player's 19 MB went as a startup
+  argument, and each launch blocked until the previous worker had read it. Now via a /dev/shm file.
+- More workers made learned trips slower (1 worker 2.1 s, 18 workers 9.0 s): one decision at a time
+  reads the whole 19 MB first layer, so 18 workers saturate memory bandwidth (~34 GB/s). A 2 MB player
+  scaled fine. Workers now run up to 32 trips in lockstep and decide for all in one batch.
+- Every pool start re-imported the main script, and so JAX, in 18 processes (2 s vs 0.09 s without JAX),
+  and every build/sample/run started a pool. Now one pool per run (`workers.py`).
+- The workers' CPU-only JAX settings never applied (JAX was already imported via the main script), so all
+  workers initialized the GPU. Now set in the environment workers inherit.
+- Compiling training code: JAX's disk cache (flake env) saves ~4 s per model on later runs.
+Unchanged behavior: random and replay players give exactly the same 42% / 92% on the 600 held-out trips.
