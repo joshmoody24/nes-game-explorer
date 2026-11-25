@@ -9,21 +9,25 @@ import os
 import numpy as np
 
 BUTTONS = {"B": 0, "SELECT": 2, "START": 3, "UP": 4, "DOWN": 5, "LEFT": 6, "RIGHT": 7, "A": 8}
-JOYPAD = 1
 SYSTEM_RAM = 2
 ENVIRONMENT_GET_CAN_DUPE = 3
 ENVIRONMENT_GET_SYSTEM_DIRECTORY = 9
 ENVIRONMENT_SET_PIXEL_FORMAT = 10
 ENVIRONMENT_GET_SAVE_DIRECTORY = 31
+ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE = 47 | 0x10000
 PIXEL_FORMAT_XRGB8888 = 1
 PIXEL_FORMAT_RGB565 = 2
 
 EnvironmentCallback = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_uint, ctypes.c_void_p)
 VideoCallback = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_size_t)
-AudioSampleCallback = ctypes.CFUNCTYPE(None, ctypes.c_int16, ctypes.c_int16)
-AudioBatchCallback = ctypes.CFUNCTYPE(ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t)
-InputPollCallback = ctypes.CFUNCTYPE(None)
-InputStateCallback = ctypes.CFUNCTYPE(ctypes.c_int16, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint)
+# The per-frame callbacks are answered in C (shim/shim.c) so emulation never calls back into Python.
+SHIM_CALLBACKS = {
+    "retro_set_video_refresh": "shim_video",
+    "retro_set_audio_sample": "shim_audio_sample",
+    "retro_set_audio_sample_batch": "shim_audio_batch",
+    "retro_set_input_poll": "shim_input_poll",
+    "retro_set_input_state": "shim_input_state",
+}
 
 
 class GameInfo(ctypes.Structure):
@@ -41,25 +45,22 @@ class Emulator:
     the same process would share it.
     """
 
-    def __init__(self, core_path, rom_path, scratch_dir="/tmp/metroid-explorer"):
+    def __init__(self, core_path, rom_path, scratch_dir="/tmp/metroid-explorer", shim_path=None):
         os.makedirs(scratch_dir, exist_ok=True)
         self._scratch_dir = ctypes.c_char_p(scratch_dir.encode())
-        self._pressed = 0
+        self._buttons = 0
         self._pixel_format = 0
         self._last_frame = None
-        self._capturing = False
+        self._capturing_video = False
         self._core = ctypes.CDLL(core_path)
-        # Kept as attributes so the callbacks aren't garbage collected while the core holds them.
-        self._callbacks = [
-            (self._core.retro_set_environment, EnvironmentCallback(self._environment)),
-            (self._core.retro_set_video_refresh, VideoCallback(self._video)),
-            (self._core.retro_set_audio_sample, AudioSampleCallback(lambda *_: None)),
-            (self._core.retro_set_audio_sample_batch, AudioBatchCallback(lambda data, frames: frames)),
-            (self._core.retro_set_input_poll, InputPollCallback(lambda: None)),
-            (self._core.retro_set_input_state, InputStateCallback(self._input_state)),
-        ]
-        for setter, callback in self._callbacks:
-            setter(callback)
+        self._shim = ctypes.CDLL(shim_path or os.environ["SHIM"])
+        # Kept as attributes so they aren't garbage collected while the core holds them.
+        self._environment_callback = EnvironmentCallback(self._environment)
+        self._capture_callback = VideoCallback(self._capture)
+        self._core.retro_set_environment(self._environment_callback)
+        for setter, shim_function in SHIM_CALLBACKS.items():
+            getattr(self._core, setter)(ctypes.cast(getattr(self._shim, shim_function), ctypes.c_void_p))
+        self._retro_run = ctypes.cast(self._core.retro_run, ctypes.c_void_p)
         self._core.retro_init()
         self._rom = open(rom_path, "rb").read()
         game = GameInfo(rom_path.encode(), ctypes.cast(ctypes.c_char_p(self._rom), ctypes.c_void_p),
@@ -85,22 +86,23 @@ class Emulator:
         if command in (ENVIRONMENT_GET_SYSTEM_DIRECTORY, ENVIRONMENT_GET_SAVE_DIRECTORY):
             ctypes.cast(data, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.cast(self._scratch_dir, ctypes.c_void_p).value
             return True
+        if command == ENVIRONMENT_GET_AUDIO_VIDEO_ENABLE:
+            # Bit 0 enables video, bit 1 audio. Cores that honor this skip producing frames we'd discard.
+            ctypes.cast(data, ctypes.POINTER(ctypes.c_int))[0] = int(self._capturing_video)
+            return True
         if command == ENVIRONMENT_SET_PIXEL_FORMAT:
             self._pixel_format = ctypes.cast(data, ctypes.POINTER(ctypes.c_int))[0]
             return True
         return False
 
-    def _video(self, data, width, height, pitch):
-        if self._capturing and data:
+    def _capture(self, data, width, height, pitch):
+        if data:
             self._last_frame = (ctypes.string_at(data, height * pitch), width, height, pitch)
 
-    def _input_state(self, port, device, index, button):
-        return (self._pressed >> button) & 1 if port == 0 and device == JOYPAD else 0
-
     def run(self, buttons=0, frames=1):
-        self._pressed = buttons
-        for _ in range(frames):
-            self._core.retro_run()
+        """Holds buttons for frames frames. The loop runs in C."""
+        self._buttons = buttons
+        self._shim.shim_run(self._retro_run, buttons, frames)
 
     def save(self):
         if not self._core.retro_serialize(self._state_buffer, self.state_size):
@@ -113,9 +115,11 @@ class Emulator:
 
     def screenshot(self):
         """Runs one more frame and returns it as RGB [height, width, 3]. For debugging only."""
-        self._capturing = True
-        self.run(self._pressed)
-        self._capturing = False
+        self._core.retro_set_video_refresh(self._capture_callback)
+        self._capturing_video = True
+        self.run(self._buttons)
+        self._capturing_video = False
+        self._core.retro_set_video_refresh(ctypes.cast(self._shim.shim_video, ctypes.c_void_p))
         raw, width, height, pitch = self._last_frame
         if self._pixel_format == PIXEL_FORMAT_XRGB8888:
             pixels = np.frombuffer(raw, np.uint8).reshape(height, pitch // 4, 4)[:, :width]
