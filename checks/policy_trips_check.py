@@ -19,7 +19,7 @@ from controls import ACTIONS, FRAMES_PER_STEP
 from emulator import Emulator
 from experience import build, replay_memories, valid_recordings
 from explorers import Settings, hand_made_place
-from policy import train
+from policy import mean_loss, train
 
 STICKY = 0.25
 
@@ -66,26 +66,19 @@ def main():
     rng.shuffle(recordings)
     held_out = [r for r in recordings[training_count:] if len(r[1]) >= 40]
     started = time.perf_counter()
-    experience = build(emulator, recordings[:training_count])
+    experience = build(emulator, recordings[:training_count], on_device=True)
     built = time.perf_counter()
     print(f"{len(recordings)} usable recordings; training on {training_count} "
           f"({len(experience.actions)} steps, {len(experience.byte_indices)} varying bytes); "
           f"{len(held_out)} held out")
     policy = train(experience, jax.random.key(0), updates=args.updates, batch=args.batch)
     trained = time.perf_counter()
-    from policy import loss, sample_batch
-    import jax.numpy as jnp
     held_out_experience = build(emulator, held_out[:500], experience.byte_indices)
-    batch_rng = np.random.default_rng(1)
     for name, data in [("training", experience), ("held-out", held_out_experience)]:
-        values = [float(loss(policy.params, *map(jnp.asarray, sample_batch(batch_rng, data, 2048)))) for _ in range(5)]
-        print(f"loss on {name} recordings: {np.mean(values):.3f} (3.22 = guessing among {len(ACTIONS)} buttons)")
-        shuffled = []
-        for _ in range(5):
-            observations, goals, actions = sample_batch(batch_rng, data, 2048)
-            shuffled.append(float(loss(policy.params, jnp.asarray(observations),
-                                       jnp.asarray(goals[batch_rng.permutation(len(goals))]), jnp.asarray(actions))))
-        print(f"  same, with each goal swapped for a random other one: {np.mean(shuffled):.3f}")
+        print(f"loss on {name} recordings: {mean_loss(policy.params, data, jax.random.key(1)):.3f} "
+              f"(3.22 = guessing among {len(ACTIONS)} buttons)")
+        print(f"  same, with each goal swapped for a random other one: "
+              f"{mean_loss(policy.params, data, jax.random.key(2), shuffle_goals=True):.3f}")
     print(f"timing: building data {built - started:.0f}s ({len(experience.actions) / (built - started):,.0f} steps/s), "
           f"training {trained - built:.0f}s ({args.updates / (trained - built):.0f} updates/s)")
 

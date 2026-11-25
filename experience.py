@@ -23,7 +23,7 @@ class Experience:
     """Recordings flattened: recording r has observations[observation_offsets[r]:observation_offsets[r + 1]]
     (one more than its actions) and actions[action_offsets[r]:action_offsets[r + 1]]."""
     byte_indices: np.ndarray  # which memory bytes an observation holds
-    observations: np.ndarray  # [rows, len(byte_indices)] uint8
+    observations: np.ndarray  # [rows, len(byte_indices)] uint8, on the host or the accelerator
     actions: np.ndarray  # [steps] uint8, indices into controls.ACTIONS
     observation_offsets: np.ndarray
     action_offsets: np.ndarray
@@ -102,19 +102,29 @@ def _replay_selected(recordings):
     return results
 
 
-def build(emulator, recordings, byte_indices=None, workers=18):
-    """Replays recordings into an Experience, in parallel worker processes, into one preallocated array."""
+def build(emulator, recordings, byte_indices=None, workers=18, on_device=False):
+    """
+    Replays recordings into an Experience, in parallel worker processes, into one preallocated array.
+    on_device puts that array on the accelerator and writes each worker's rows straight into it, so host
+    memory stays small however much data there is.
+    """
     if byte_indices is None:
         byte_indices = choose_bytes(emulator, recordings)
     observation_offsets = np.cumsum([0] + [len(actions) + 1 for _, actions in recordings])
     action_offsets = np.cumsum([0] + [len(actions) for _, actions in recordings])
-    observations = np.empty((observation_offsets[-1], len(byte_indices)), np.uint8)
+    if on_device:
+        import device  # only here: the replay workers import this module and must not load JAX
+    shape = (observation_offsets[-1], len(byte_indices))
+    observations = device.zeros(shape) if on_device else np.empty(shape, np.uint8)
     bounds = np.linspace(0, len(recordings), min(len(recordings), workers * 8) + 1).astype(int)
     chunks = [recordings[a:b] for a, b in zip(bounds[:-1], bounds[1:])]
     with ProcessPoolExecutor(workers, mp_context=get_context("spawn"), initializer=_start_replayer,
                              initargs=(byte_indices,)) as pool:
         for first, results in zip(bounds[:-1], pool.map(_replay_selected, chunks)):
-            for r, rows in enumerate(results, start=first):
-                observations[observation_offsets[r]:observation_offsets[r + 1]] = rows
+            if on_device:  # a chunk's recordings are consecutive, so their rows are one contiguous block
+                observations = device.write_rows(observations, np.concatenate(results), observation_offsets[first])
+            else:
+                for r, rows in enumerate(results, start=first):
+                    observations[observation_offsets[r]:observation_offsets[r + 1]] = rows
     return Experience(byte_indices, observations, np.concatenate([a for _, a in recordings]),
                       observation_offsets, action_offsets, [state for state, _ in recordings])

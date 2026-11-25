@@ -12,6 +12,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+import device
 from controls import ACTIONS
 
 MAX_GAP = 32  # goals are 1..MAX_GAP steps after the observation
@@ -51,22 +52,9 @@ def loss(params, observations, goals, actions, dtype=jnp.float32):
     return optax.softmax_cross_entropy_with_integer_labels(logits(params, observations, goals, dtype), actions).mean()
 
 
-def sample_batch(rng, experience, size):
-    """Random (observation, goal 1..MAX_GAP steps later in the same recording, action) triples."""
-    steps = rng.integers(0, len(experience.actions), size)
-    recording = np.searchsorted(experience.action_offsets, steps, side="right") - 1
-    t = steps - experience.action_offsets[recording]
-    remaining = experience.action_offsets[recording + 1] - experience.action_offsets[recording] - t
-    gap = 1 + (rng.random(size) * np.minimum(MAX_GAP, remaining)).astype(int)
-    base = experience.observation_offsets[recording] + t
-    return experience.observations[base], experience.observations[base + gap], experience.actions[steps]
-
-
-OPTIMIZER = optax.adamw(3e-4, weight_decay=1e-4)
-
-
 def sample_on_device(key, data, size):
-    """sample_batch's draw, done on the accelerator from arrays already there."""
+    """Random (observation, goal 1..MAX_GAP steps later in the same recording, action) triples, drawn on
+    the accelerator from data already there (see device_data)."""
     observations, actions, observation_offsets, action_offsets = data
     step_key, gap_key = jax.random.split(key)
     steps = jax.random.randint(step_key, (size,), 0, len(actions))
@@ -76,6 +64,9 @@ def sample_on_device(key, data, size):
     gap = 1 + (jax.random.uniform(gap_key, (size,)) * jnp.minimum(MAX_GAP, remaining)).astype(jnp.int32)
     base = observation_offsets[recording] + t
     return observations[base], observations[base + gap], actions[steps]
+
+
+OPTIMIZER = optax.adamw(3e-4, weight_decay=1e-4)
 
 
 @partial(jax.jit, static_argnames=["updates", "batch"], donate_argnums=(0, 1))
@@ -120,13 +111,33 @@ class GoalPolicy:
 _logits = jax.jit(logits)
 
 
+def device_data(experience):
+    """The arrays training samples from, on the accelerator."""
+    return (device.to_device(experience.observations), jnp.asarray(experience.actions),
+            jnp.asarray(experience.observation_offsets), jnp.asarray(experience.action_offsets))
+
+
+@partial(jax.jit, static_argnames=["size", "shuffle_goals"])
+def _sampled_loss(params, key, data, size, shuffle_goals):
+    sample_key, shuffle_key = jax.random.split(key)
+    observations, goals, actions = sample_on_device(sample_key, data, size)
+    if shuffle_goals:
+        goals = jax.random.permutation(shuffle_key, goals)
+    return loss(params, observations, goals, actions)
+
+
+def mean_loss(params, experience, key, shuffle_goals=False, batches=5, size=2048):
+    """Average loss over random batches. shuffle_goals pairs each observation with someone else's goal."""
+    data = device_data(experience)
+    return float(np.mean([_sampled_loss(params, k, data, size, shuffle_goals) for k in jax.random.split(key, batches)]))
+
+
 def train(experience, key, updates=5000, batch=512, chunk=1000, log=print):
     """Trains on the default device (the GPU when there is one), with the whole dataset copied there once."""
     init_key, key = jax.random.split(key)
     params = init_params(init_key, 2 * len(experience.byte_indices), len(ACTIONS))
     optimizer_state = OPTIMIZER.init(params)
-    data = tuple(map(jnp.asarray, (experience.observations, experience.actions,
-                                   experience.observation_offsets, experience.action_offsets)))
+    data = device_data(experience)
     for done in range(0, updates, chunk):
         key, chunk_key = jax.random.split(key)
         params, optimizer_state, values = _train_chunk(params, optimizer_state, chunk_key, data,
