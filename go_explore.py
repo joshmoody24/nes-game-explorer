@@ -100,7 +100,29 @@ def resumed_archive(run_name, settings, emulator):
     return archive
 
 
-def checkpoint(run_dir, archive, segment_log):
+class Recordings:
+    """
+    Button sequences of sampled segments, saved as trajectories.npz: for recording i, the segment started
+    from archive index start[i] (whose state had checksum start_checksum[i]) and pressed
+    actions[offsets[i]:offsets[i + 1]] (indices into controls.ACTIONS). Emulation is deterministic, so
+    replaying those buttons from that state regenerates every frame.
+    """
+
+    def __init__(self):
+        self.starts, self.checksums, self.actions, self.offsets = [], [], bytearray(), [0]
+
+    def add(self, segment):
+        self.starts.append(segment.start)
+        self.checksums.append(segment.start_checksum)
+        self.actions += segment.actions
+        self.offsets.append(len(self.actions))
+
+    def save(self, path):
+        np.savez(path, start=np.array(self.starts), start_checksum=np.array(self.checksums, dtype=np.uint32),
+                 actions=np.frombuffer(bytes(self.actions), np.uint8), offsets=np.array(self.offsets))
+
+
+def checkpoint(run_dir, archive, segment_log, recordings):
     """
     Plain data only, so a checkpoint loads without this module. segments.npz has one row per segment:
     the archive index it started from, how many new places it added, and its frames.
@@ -109,6 +131,7 @@ def checkpoint(run_dir, archive, segment_log):
     temporary.write_bytes(zlib.compress(pickle.dumps(dataclasses.asdict(archive)), level=1))
     temporary.rename(run_dir / "checkpoint.pkl.z")
     np.savez(run_dir / "segments.npz", **{name: np.array(values) for name, values in segment_log.items()})
+    recordings.save(run_dir / "trajectories.npz")
 
 
 def parse_arguments():
@@ -118,6 +141,8 @@ def parse_arguments():
     parser.add_argument("--workers", type=int, default=18)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
+    parser.add_argument("--record", type=float, default=0.1, metavar="FRACTION",
+                        help="share of segments whose button sequences are saved as training data")
     parser.add_argument("--stop-after-stall", type=float, metavar="MINUTES",
                         help="also stop once the archive grew by less than 1%% over the last MINUTES")
     for setting in dataclasses.fields(Settings):
@@ -143,6 +168,7 @@ def prepare_run_dir(args, settings):
     run_dir.mkdir(parents=True)
     (run_dir / "config.json").write_text(json.dumps(
         {"minutes": args.minutes, "workers": args.workers, "seed": args.seed, "resume": args.resume,
+         "record": args.record,
          "stop_after_stall": args.stop_after_stall}
         | dataclasses.asdict(settings),
         indent=2))
@@ -166,6 +192,7 @@ def main():
     frames = 0
     gaps = []
     segment_log = {"start": [], "new_places": [], "frames": []}
+    recordings = Recordings()
     explorers = Explorers(args.workers, settings, args.seed)
 
     def assign(worker_index):
@@ -189,6 +216,8 @@ def main():
                 new_places = outcomes.count("new")
                 # A stronger state for a known place (healed, rearmed) counts as progress, like a new place.
                 archive.discoveries[segment.start] += new_places + outcomes.count("improved")
+                if rng.random() < args.record:
+                    recordings.add(segment)
                 segment_log["start"].append(segment.start)
                 segment_log["new_places"].append(new_places)
                 segment_log["frames"].append(segment.frames)
@@ -207,10 +236,10 @@ def main():
                     print(f"stopping: archive grew under 1% in the last {args.stop_after_stall} minutes", flush=True)
                     break
             if now - last_checkpoint > CHECKPOINT_EVERY_SECONDS:
-                checkpoint(run_dir, archive, segment_log)
+                checkpoint(run_dir, archive, segment_log, recordings)
                 last_checkpoint = now
     explorers.close()
-    checkpoint(run_dir, archive, segment_log)
+    checkpoint(run_dir, archive, segment_log, recordings)
     print(json.dumps(line), flush=True)
 
 

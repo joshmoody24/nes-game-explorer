@@ -187,3 +187,15 @@ fewer in 0%. Segments ending in game over: 70% low vs 19% healed. The previous e
 have fewer descendants" reflected *where* healthy states are (safe, explored areas), not what health
 does. Frontier states arrive nearly dead, so most exploration from the frontier dies: health supply at
 the frontier is a bottleneck.
+
+## 2026-11-24: health supply fixed, progress not; recordings for learning
+
+- **Health bands in places + keep the healthiest** (hand-given diagnostic: energy bands 0-4 / 5-14 /
+  15-29 / 30+; `runs/health-buckets-15min`): the archive became healthy (median energy 14, 72% of
+  states at 10+, 1% at 0-2, vs 1 / 5% / 66% for the safety keep rule), with ~3.5x as many places
+  (34,986). Progress unchanged: 97 rooms, Morph Ball, 10 missiles, one energy tank at 13.3 min, no
+  Long Beam. Healthy frontier states are necessary but not sufficient: the red door still needs a
+  coordinated sequence random play doesn't produce.
+- **Recordings** (`go_explore --record FRACTION`, default 0.1): a 30-s run saved 4,410 segments
+  (~87 steps each). `python -m checks.replay_check`: 200 of 200 sampled recordings match their
+  start-state checksum and replay to identical memory twice.

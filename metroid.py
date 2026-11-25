@@ -35,3 +35,8 @@ def start_game(emulator):
 
 def area_of(memory):
     return int(memory[AREA]) & 0x0F
+
+
+def energy_of(memory):
+    """Current energy, 0-99: $0107 low nibble is tens, $0106 high nibble is ones."""
+    return 10 * (int(memory[0x107]) & 0x0F) + (int(memory[0x106]) >> 4)

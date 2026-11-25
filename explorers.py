@@ -8,6 +8,7 @@ sync just means sending the updates logged since its last task.
 """
 
 import os
+import zlib
 from dataclasses import dataclass
 from multiprocessing import get_context
 from multiprocessing.connection import wait
@@ -18,7 +19,7 @@ from controls import ACTIONS, FRAMES_PER_STEP
 from emulator import Emulator
 from empowerment import controllable_bits, lost_control_rate
 from metroid import (CURRENT_MISSILES, ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES,
-                     ROOM_X, ROOM_Y, area_of, at)
+                     ROOM_X, ROOM_Y, area_of, at, energy_of)
 from progress import Progress
 
 ROM = "roms/metroid.nes"
@@ -39,16 +40,19 @@ class Settings:
     selection: str = "least-chosen"
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
+    # Hand-given knowledge, for diagnosis: split places by energy band, so healthy and nearly dead versions
+    # of the same spot are kept separately.
+    health_buckets: bool = False
     # Which state a place keeps: "first" (the first one seen); "empowerment" (the state from which my
     # actions change the most memory bits, see empowerment.py); "rare-empowerment" (the same, with each
     # bit weighted by how rarely it is changeable, so scarce abilities like ammo count most); "safety" (the
     # state from which random play least often ends with my buttons doing nothing, i.e. furthest from
-    # death); or, as a hand-given diagnostic, "more-missiles" (whenever a visit arrives with more missiles).
+    # death); or, as a hand-given diagnostic, "more-missiles" / "more-health" (whenever a visit arrives with more missiles / energy).
     keep: str = "first"
 
     def __post_init__(self):
         # Catches typos in flags, which would otherwise silently fall back to the default behavior.
-        assert self.keep in ("first", "empowerment", "rare-empowerment", "safety", "more-missiles"), f"unknown keep {self.keep!r}"
+        assert self.keep in ("first", "empowerment", "rare-empowerment", "safety", "more-missiles", "more-health"), f"unknown keep {self.keep!r}"
         assert self.selection in ("least-chosen", "productive", "powerful"), f"unknown selection {self.selection!r}"
 
 
@@ -57,13 +61,25 @@ def hand_made_place(memory, settings):
     return (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]),
             int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size,
             int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5,
-            int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None)
+            int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None,
+            energy_band(energy_of(memory)) if settings.health_buckets else None)
+
+
+ENERGY_BANDS = (5, 15, 30)  # uneven: the difference between 2 and 12 energy matters more than 52 vs 62
+
+
+def energy_band(energy):
+    return sum(energy >= edge for edge in ENERGY_BANDS)
 
 
 def score(memory, settings):
     """Higher-scoring states replace lower ones in the same place. Keep rules measured by replays are scored
     separately, after a segment (see replay_scorer), because replays are expensive."""
-    return int(memory[at(CURRENT_MISSILES)]) if settings.keep == "more-missiles" else 0
+    if settings.keep == "more-missiles":
+        return int(memory[at(CURRENT_MISSILES)])
+    if settings.keep == "more-health":
+        return energy_of(memory)
+    return 0
 
 
 EMPOWERMENT_REPLAYS, EMPOWERMENT_STEPS = 4, 10  # cheapest setting that still tells missiles from none ~80% of the time
@@ -102,6 +118,8 @@ class Segment:
     progress: Progress
     frames: int
     gaps: list  # for each new place, steps since the previous new place (or since the segment began)
+    actions: bytes  # index into ACTIONS for every step taken, so the segment can be replayed exactly
+    start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
 
 
 def replay_scorer(settings):
@@ -119,10 +137,12 @@ def explore(emulator, rng, settings, known, start, start_state, replay_score=Non
     action = rng.integers(len(ACTIONS))
     stale = 0
     revisit, revisits = None, 0  # one revisit of a known place, sampled uniformly, to score for empowerment
+    pressed = bytearray()
     for step in range(settings.steps_per_segment):
         if rng.random() > settings.repeat_probability:
             action = rng.integers(len(ACTIONS))
         emulator.run(ACTIONS[action], FRAMES_PER_STEP)
+        pressed.append(action)
         state = emulator.save()
         memory = emulator.view(state)
         if memory[GAME_MODE] == GAME_OVER:
@@ -152,7 +172,7 @@ def explore(emulator, rng, settings, known, start, start_state, replay_score=Non
             state_score = replay_score(emulator, rng, state)
             if state_score > known[place]:
                 found[place] = (state, state_score)
-    return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps)
+    return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state))
 
 
 def worker(connection, settings, seed):
