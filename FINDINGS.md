@@ -166,3 +166,14 @@ Races: `python race.py <name> <minutes> "<label>=<flags>" ...` (3 seeds x 6 work
   health from <=5 to 29 lowered predicted danger in 100% of 2,827 states (median -0.03); editing 200
   random other bytes changed it by 0.00, none as much as healing. Deaths are common, so this signal is
   dense enough to learn "health matters" from random play; the effect is consistent but small.
+
+## 2026-11-24: resources are worth what the player can do with them
+
+Family tree of a 5-min keep-first run (`runs/family-5min`, 4,953 places; parents now recorded):
+depth up to 174, 63% of places have no descendants. Comparing places created at similar times,
+healthy places (energy 10+) have *fewer* descendants (log-descendants -0.49 vs others), near-dead places
+average, places with ammo slightly fewer (-0.08). For a random-button explorer, health and ammo barely
+help discovery: new territory is found by lineages that push into danger and take damage, and ammo's
+one use (red doors) is almost never achieved by random play. This explains why every keep/selection rule
+based on power (empowerment, rarity, safety) failed to change progress: the explorer can't use the
+power. Resources gain value only for a player that can act deliberately.

@@ -39,10 +39,11 @@ class Archive:
     scores: list = field(default_factory=list)  # see explorers.score; the kept state has the best seen
     times_chosen: list = field(default_factory=list)
     discoveries: list = field(default_factory=list)  # new places found by segments started here
+    parents: list = field(default_factory=list)  # archive index of the place whose segment found this one (-1: start)
     index: dict = field(default_factory=dict)  # place -> position in the lists above
     updates: list = field(default_factory=list)  # append-only (place, score) log that workers sync from
 
-    def offer(self, place, state, score):
+    def offer(self, place, state, score, parent=-1):
         """Keeps state if place is new or score beats the kept state's. Returns "new", "improved" or None."""
         if place in self.index:
             i = self.index[place]
@@ -57,6 +58,7 @@ class Archive:
         self.scores.append(score)
         self.times_chosen.append(0)
         self.discoveries.append(0)
+        self.parents.append(parent)
         self.updates.append((place, score))
         return "new"
 
@@ -182,7 +184,7 @@ def main():
                 frames += segment.frames
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
-                outcomes = [archive.offer(place, state, state_score)
+                outcomes = [archive.offer(place, state, state_score, segment.start)
                             for place, (state, state_score) in segment.found.items()]
                 new_places = outcomes.count("new")
                 # A stronger state for a known place (healed, rearmed) counts as progress, like a new place.
