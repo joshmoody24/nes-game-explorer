@@ -123,3 +123,21 @@ Races: `python race.py <name> <minutes> "<label>=<flags>" ...` (3 seeds x 6 work
   missiles within seconds, so full-ammo revisits are rare. One run each; not yet repeated with seeds.
 - The walkthrough route (Long Beam, then lava corridors with an energy tank) is an order, not a
   requirement: the energy tank area was reached without the Long Beam.
+
+## 2026-11-24: rarity-weighted empowerment, and why "rare" isn't enough
+
+- On 100 realistic pairs (different states for the same place from two runs, one edited to 5 missiles;
+  `python -m checks.rare_control_check baseline-select empowerment-15min`), picking the armed state:
+  plain empowerment total 65%, rarity-weighted "what only I can change" 70%, rarity-weighted total per
+  state 70%. Paired (same state) the plain total got 93%: most of the signal is lost to differences
+  between states.
+- Fresh 15-min run keeping states by rarity-weighted empowerment (`runs/rare-empowerment-15min`): early
+  milestones at the same pace as plain empowerment, second Missile Tank at 3:20 (earliest of any run),
+  final 82 rooms, Morph Ball + 10 missiles, no Long Beam / tanks / Bombs. Ammo kept no better: states
+  with missile capacity and any ammo left: keep-first 7%, empowerment 6%, rare-empowerment 7%.
+- Ranking bytes by how often random replays can change them (400 states, 8 x 30): ~2,500 bytes are
+  changeable in 0.5-30% of states. Current missiles ($6879, 3.5%) sits among enemy tables ($04xx-$05xx),
+  room data ($6Bxx), max missiles ($687A) and tanks ($0107). Rarity alone can't single out resources,
+  so adding "rare" bytes to places would explode the archive.
+- Supply looks like the real limit: random play spends missiles within seconds, so full-ammo states are
+  ~1-2% of states with capacity in every run, whatever the keep rule.

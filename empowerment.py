@@ -13,6 +13,11 @@ from controls import ACTIONS, FRAMES_PER_STEP
 
 def action_diversity(emulator, state, rng, replays=8, steps=30, repeat_probability=0.9):
     """Number of memory bits that end up different between replays of random buttons from state."""
+    return int(controllable_bits(emulator, state, rng, replays, steps, repeat_probability).sum())
+
+
+def controllable_bits(emulator, state, rng, replays=8, steps=30, repeat_probability=0.9):
+    """Boolean per memory bit: did it end up different between replays of random buttons from state?"""
     endings = []
     for _ in range(replays):
         emulator.load(state)
@@ -23,4 +28,4 @@ def action_diversity(emulator, state, rng, replays=8, steps=30, repeat_probabili
             emulator.run(ACTIONS[action], FRAMES_PER_STEP)
         endings.append(np.unpackbits(emulator.memory()))
     endings = np.array(endings)
-    return int((endings != endings[0]).any(0).sum())
+    return (endings != endings[0]).any(0)

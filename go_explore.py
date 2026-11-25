@@ -146,7 +146,7 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = start_game(emulator)
     if args.resume:
-        assert settings.keep != "empowerment", "resuming would mean measuring empowerment for every saved state"
+        assert "empowerment" not in settings.keep, "resuming would mean measuring empowerment for every saved state"
         archive = resumed_archive(args.resume, settings, emulator)
     else:
         archive = Archive(settings.selection)
