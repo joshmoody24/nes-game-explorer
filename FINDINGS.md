@@ -613,3 +613,18 @@ spendables.
   in layer 2 but not Long Beam visits in layer 1; "rarity-weighted one-way bits gained since the layer
   start" picks Long Beam visits in layer 1 but not Bombs visits in layer 2. Needs a better signal, e.g.
   watching every step for bits that flip on and stay on, instead of sampled recordings.
+
+## 2026-11-25 (afternoon): Bombs reproduced; acquisitions are clusters of one-way bits
+
+- Every-step bit watching (`progress.see_change`, bitwise on bytes, ~8% slower; saved as bit_flips.npz)
+  leaves 210-300 one-way bits after a 15-20 min run, vs ~1000 after 1 min, and catches item bits that
+  sampled recordings never saw.
+- Layer 1 rerun (missiles-only hoarding, 15 min, `runs/layer1-watch`): 95 rooms, no Long Beam (Long Beam
+  now 2 of 4 such runs). Layer 2 rerun from the Long Beam (missiles-only hoarding, 20 min,
+  `runs/layer2-watch`): **Bombs again** (129 rooms, energy tank) - reproduced.
+- Trigger: summing or maximizing rarity over gained one-way bits picks junk held by one or two visits.
+  Real acquisitions *spread*: in layer 2 the Bombs bit (0x1078.0) is held by 14% of visits **together
+  with a block at 0x1086-0x1094** (cartridge RAM where the game records taken items and opened doors),
+  all exactly 14%; the energy tank bit 0x1077.0 with 0x108f-0x1090, all 55%. In layer 1 the second
+  missile tank: 0x107a.1/.3 with 0x108b-0x108c, all 53% (plus noisier map/room bits). Next: define an
+  event as a set of one-way bits held by exactly the same visits; each event seeds a child layer.

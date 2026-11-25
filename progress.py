@@ -24,7 +24,7 @@ class Progress:
     one shared start state would make every bit that moves away from it look one-way.
     """
     layouts: set = field(default_factory=set)
-    ever_up: np.ndarray = None  # bits ever seen going 0 -> 1 between a before and an after
+    ever_up: np.ndarray = None  # uint8 masks: memory bits ever seen going 0 -> 1 between a before and an after
     ever_down: np.ndarray = None
     rooms: set = field(default_factory=set)
     areas: set = field(default_factory=set)
@@ -34,12 +34,12 @@ class Progress:
     statues: int = 0  # bit 0 Kraid, bit 1 Ridley: statue raised, i.e. boss defeated
 
     def see_change(self, before, after):
-        before, after = np.unpackbits(before), np.unpackbits(after)
+        # Bitwise on bytes, not unpacked bits: cheap enough to run on every step.
         if self.ever_up is None:
-            self.ever_up = np.zeros(len(before), dtype=bool)
-            self.ever_down = np.zeros(len(before), dtype=bool)
-        self.ever_up |= after > before
-        self.ever_down |= after < before
+            self.ever_up = np.zeros(len(before), dtype=np.uint8)
+            self.ever_down = np.zeros(len(before), dtype=np.uint8)
+        self.ever_up |= after & ~before
+        self.ever_down |= before & ~after
 
     def see(self, memory, nametable):
         self.layouts.add(hash(nametable))
@@ -68,7 +68,7 @@ class Progress:
     def summary(self):
         return {
             "background layouts": len(self.layouts),
-            "one-way bits": int((self.ever_up ^ self.ever_down).sum()) if self.ever_up is not None else 0,
+            "one-way bits": int(np.unpackbits(self.ever_up & ~self.ever_down).sum()) if self.ever_up is not None else 0,
             "rooms": len(self.rooms),
             "areas": sorted(self.areas),
             "items": [name for bit, name in ITEM_BITS.items() if self.items & bit],

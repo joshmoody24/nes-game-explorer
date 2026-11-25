@@ -269,6 +269,9 @@ def main():
                 last_checkpoint = now
     explorers.close()
     checkpoint(run_dir, archive, segment_log, recordings)
+    if progress.ever_up is not None:
+        # Every bit ever seen turning on, and every bit ever seen turning off, over every step of the run.
+        np.savez(run_dir / "bit_flips.npz", ever_up=progress.ever_up, ever_down=progress.ever_down)
     print(json.dumps(line), flush=True)
 
 

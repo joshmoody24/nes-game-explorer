@@ -100,6 +100,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
+    previous_memory = None
     weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
     probabilities = weights / weights.sum()
     action = rng.choice(len(ACTIONS), p=probabilities)
@@ -113,6 +114,10 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         pressed.append(action)
         state = emulator.save()
         memory = emulator.view(state)
+        full_memory = emulator.memory(state)
+        if previous_memory is not None:
+            progress.see_change(previous_memory, full_memory)
+        previous_memory = full_memory
         if memory[GAME_MODE] == GAME_OVER:
             break
         place = hand_made_place(memory, settings)
