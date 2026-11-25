@@ -177,3 +177,13 @@ help discovery: new territory is found by lineages that push into danger and tak
 one use (red doors) is almost never achieved by random play. This explains why every keep/selection rule
 based on power (empowerment, rarity, safety) failed to change progress: the explorer can't use the
 power. Resources gain value only for a player that can act deliberately.
+
+## 2026-11-24: correction - health causally expands reach (the family-tree result was confounded)
+
+`python -m checks.health_reach_check family-5min 100 30`: 100 recently discovered (frontier) states
+with energy <= 9; each copied with energy edited to 29; 30 random 100-step segments from both, same
+seeds. New places reached per state: 0.03 low vs 1.26 healed; healed reached more in 21% of states,
+fewer in 0%. Segments ending in game over: 70% low vs 19% healed. The previous entry's "healthy places
+have fewer descendants" reflected *where* healthy states are (safe, explored areas), not what health
+does. Frontier states arrive nearly dead, so most exploration from the frontier dies: health supply at
+the frontier is a bottleneck.
