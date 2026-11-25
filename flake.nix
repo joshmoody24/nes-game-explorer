@@ -16,6 +16,7 @@
       devShells.x86_64-linux.default = pkgs.mkShell {
         packages = [
           (pkgs.python313.withPackages (ps: [ ps.jax ps.optax ps.numpy ps.matplotlib (rocm.jaxRocm ps) ]))
+          pkgs.ffmpeg-headless
         ];
         QUICKNES_CORE = "${pkgs.libretro.quicknes}/lib/retroarch/cores/quicknes_libretro.so";
         SHIM = "${shim}/lib/libshim.so";

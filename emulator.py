@@ -167,9 +167,13 @@ class Emulator:
 
     def screenshot(self):
         """Runs one more frame and returns it as RGB [height, width, 3]. For debugging only."""
+        return self.frame(self._buttons)
+
+    def frame(self, buttons):
+        """Holds buttons for one frame, with video on, and returns the picture as RGB [height, width, 3]."""
         self._core.retro_set_video_refresh(self._capture_callback)
         self._capturing_video = True
-        self.run(self._buttons)
+        self.run(buttons)
         self._capturing_video = False
         self._core.retro_set_video_refresh(ctypes.cast(self._shim.shim_video, ctypes.c_void_p))
         raw, width, height, pitch = self._last_frame
