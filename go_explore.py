@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from emulator import Emulator
-from explorers import ROM, Explorers, Settings, hand_made_place, rank
+from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings
 from metroid import start_game
 from progress import Progress
 
@@ -34,42 +34,56 @@ CHECKPOINT_EVERY_SECONDS = 300
 
 @dataclass
 class Archive:
+    """
+    Visits worth keeping: for each place, every visit that no other visit there beats (see explorers.beats).
+    A visit that beats a kept one takes over its slot; any others it beats stay in the lists (others refer
+    to them by position) but are no longer chosen.
+    """
     places: list = field(default_factory=list)
     states: list = field(default_factory=list)
     times_chosen: list = field(default_factory=list)
-    parents: list = field(default_factory=list)  # archive index of the place whose segment found this one (-1: start)
-    # Buttons (indices into ACTIONS) from the start state to the kept state, the shortest found: every place
-    # has a replayable route. None for places resumed from an older run, which didn't keep paths.
+    parents: list = field(default_factory=list)  # archive index of the visit whose segment found this one (-1: start)
+    # Buttons (indices into ACTIONS) from the start state to the kept state: every visit has a replayable
+    # route. None for places resumed from an older run, which didn't keep paths.
     paths: list = field(default_factory=list)
-    ranks: list = field(default_factory=list)  # see explorers.rank: what the kept state holds, then path length
-    index: dict = field(default_factory=dict)  # place -> position in the lists above
-    updates: list = field(default_factory=list)  # append-only (place, rank) log that workers sync from
+    holdings: list = field(default_factory=list)  # see explorers.holdings
+    active: list = field(default_factory=list)  # False once another visit to the same place beats it
+    index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
+    updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
 
     def path_length(self, i):
         return UNKNOWN_PATH_LENGTH if self.paths[i] is None else len(self.paths[i])
 
-    def offer(self, place, state, state_rank, parent=-1, path=None):
-        """Keeps state if place is new or it ranks above the kept state. Returns "new", "better" or None."""
-        if place in self.index:
-            i = self.index[place]
-            if state_rank <= self.ranks[i]:
-                return None
-            self.states[i], self.paths[i], self.ranks[i] = state, path, state_rank
-            self.updates.append((place, state_rank))
+    def offer(self, place, state, held, parent=-1, path=None):
+        """Keeps the visit unless one already kept there beats it. Returns "new" (new place), "better" or None."""
+        visit = (held, UNKNOWN_PATH_LENGTH if path is None else len(path))
+        visits = self.index.get(place, [])
+        if any(self.active[i] and beats((self.holdings[i], self.path_length(i)), visit) for i in visits):
+            return None
+        beaten = [i for i in visits if self.active[i] and beats(visit, (self.holdings[i], self.path_length(i)))]
+        if beaten:
+            # The new visit takes over the first beaten one's slot, so the lists don't fill with dead visits.
+            slot, *others = beaten
+            for i in others:
+                self.active[i] = False
+            self.states[slot], self.paths[slot], self.holdings[slot] = state, path, held
+            self.parents[slot] = parent
+            self.updates.append((place, visit))
             return "better"
-        self.index[place] = len(self.places)
+        self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
         self.times_chosen.append(0)
         self.parents.append(parent)
         self.paths.append(path)
-        self.ranks.append(state_rank)
-        self.updates.append((place, state_rank))
-        return "new"
+        self.holdings.append(held)
+        self.active.append(True)
+        self.updates.append((place, visit))
+        return "better" if visits else "new"
 
     def choose(self, rng):
-        """A rarely chosen place, favoring the least chosen."""
-        weights = 1 / np.sqrt(1 + np.array(self.times_chosen))
+        """A rarely chosen visit still worth keeping, favoring the least chosen."""
+        weights = np.array(self.active) / np.sqrt(1 + np.array(self.times_chosen))
         index = int(rng.choice(len(self.places), p=weights / weights.sum()))
         self.times_chosen[index] += 1
         return index
@@ -93,7 +107,7 @@ def resumed_archive(run_name, settings, emulator):
     archive = Archive()
     for state in saved["states"]:
         memory = emulator.view(state)
-        archive.offer(hand_made_place(memory, settings), state, rank(memory, UNKNOWN_PATH_LENGTH, settings))
+        archive.offer(hand_made_place(memory, settings), state, holdings(memory, settings))
     return archive
 
 
@@ -139,6 +153,7 @@ def parse_arguments():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
     parser.add_argument("--start-state", help="a file holding a save state to explore from, instead of power-on")
+    parser.add_argument("--stop-at-item", help="diagnostic: stop once progress shows this item (e.g. \"long beam\")")
     parser.add_argument("--record", type=float, default=0.1, metavar="FRACTION",
                         help="share of segments whose button sequences are saved as training data")
     parser.add_argument("--stop-after-stall", type=float, metavar="MINUTES",
@@ -184,7 +199,7 @@ def main():
     else:
         archive = Archive()
         memory = emulator.view(start)
-        archive.offer(hand_made_place(memory, settings), start, rank(memory, 0, settings), path=b"")
+        archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0
@@ -215,9 +230,9 @@ def main():
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
                 start_path = start_paths[worker_index]
-                outcomes = [archive.offer(place, state, state_rank, segment.start,
+                outcomes = [archive.offer(place, state, held, segment.start,
                                           None if start_path is None else start_path + segment.actions[:length - len(start_path)])
-                            for place, (state, length, state_rank) in segment.found.items()]
+                            for place, (state, length, held) in segment.found.items()]
                 new_places = outcomes.count("new")
                 if rng.random() < args.record:
                     recordings.add(segment)
@@ -235,6 +250,9 @@ def main():
                 metrics.flush()
                 last_log = now
                 sizes.append((now, len(archive.places)))
+                if args.stop_at_item and any(args.stop_at_item in item for item in line["items"]):
+                    print(f"stopping: got the {args.stop_at_item} after {now - started:.0f}s", flush=True)
+                    break
                 if stalled(sizes, now, stall_window):
                     print(f"stopping: archive grew under 1% in the last {args.stop_after_stall} minutes", flush=True)
                     break

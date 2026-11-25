@@ -581,3 +581,11 @@ spendables.
 - Detector precision: requiring that two random 120-step plays from one state end with the byte different
   in at least 2% of states lifts **energy (tens) to 2nd and missiles to 3rd** (behind bytes 35 and 40).
   Running: generic hoarding with the automatic top 4 (35, 40, energy tens, missiles), two seeds.
+- **Automatic top 4 (sum)** (`runs/hoard-top4-s1`, 15 min): 119 rooms, energy tank, median energy 64, but
+  door states hold 0/2/4 missiles, never 5: the sum traded a missile for energy. A red door needs exactly 5.
+- **Pareto hoarding**: each place keeps every visit no other visit beats on all hoarded bytes (equal
+  holdings: shorter path wins), so nothing is traded. First version appended a new entry whenever a visit
+  beat a kept one: ~50K stored, ~4.5K active over ~2K places after 5 min (3 seeds x 6 workers, `race.py`);
+  now a beating visit takes over the beaten one's slot. `--stop-at-item` ends a run at a milestone.
+- Fast-protocol lesson: 3 seeds x 6 workers x 5 min equals ~1.7 min of a full run: too short for the
+  Long Beam (3 full-run minutes before); judge by proxies (armed visits at the door), not the rare event.

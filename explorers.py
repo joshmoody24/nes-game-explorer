@@ -39,10 +39,10 @@ class Settings:
     # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
     # in random play. Below 1, random play wastes missiles less often.
     select_weight: float = 1.0
-    # Memory indices (memory() numbering) whose higher total makes a place's state better, before path length:
-    # keep the state that holds more of something random play only spends (one-way reachability: a state
-    # holding more can become one holding less, not back). Empty ranks by path length alone.
-    # Comma-separated "index:scale" (or "index"); a state holding a larger total of value / scale is kept.
+    # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
+    # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
+    # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
+    # keeps just the shortest path.
     keep_more: str = ""
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
@@ -70,8 +70,8 @@ def energy_band(energy):
 
 @dataclass
 class Segment:
-    """What one stretch of random buttons found: {place: (state, path length from the start, rank)} for places
-    that were new, or reached with a better rank (see rank) than the kept state's when the segment started."""
+    """What one stretch of random buttons found: {place: (state, path length from the start, holdings)} for
+    places that were new, or reached by a visit no kept visit beats (see beats)."""
     start: int  # archive index it started from
     found: dict
     progress: Progress
@@ -81,17 +81,23 @@ class Segment:
     start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
 
 
-WORST_RANK = (-np.inf, -np.inf)
+def holdings(memory, settings):
+    """What a state holds of each hoarded byte (see keep_more), divided by its scale."""
+    return tuple(int(memory[int(index)]) / float(scale or 1)
+                 for index, _, scale in (item.partition(":") for item in settings.keep_more.split(",") if item))
 
 
-def rank(memory, path_length, settings):
-    """How a place's candidate states compare (higher is kept): what they hold (see keep_more), then shorter paths."""
-    return sum(int(memory[int(index)]) / float(scale or 1)
-               for index, _, scale in (item.partition(":") for item in settings.keep_more.split(",") if item)), -path_length
+def beats(a, b):
+    """
+    Whether visit a = (holdings, path length) makes visit b unnecessary: a holds at least as much of
+    everything, and either more of something or the same with a path no longer.
+    """
+    (held_a, length_a), (held_b, length_b) = a, b
+    return all(x >= y for x, y in zip(held_a, held_b)) and (held_a != held_b or length_a <= length_b)
 
 
 def explore(emulator, rng, settings, known, start, start_state, start_path_length):
-    """known: {place: rank of the kept state}."""
+    """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
     weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
@@ -112,9 +118,10 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         place = hand_made_place(memory, settings)
         new = place not in known and place not in found
         length = start_path_length + step + 1
-        candidate = rank(memory, length, settings)
-        if candidate > max(known.get(place, WORST_RANK), found[place][2] if place in found else WORST_RANK):
-            found[place] = (state, length, candidate)
+        held = holdings(memory, settings)
+        rivals = known.get(place, []) + ([(found[place][2], found[place][1])] if place in found else [])
+        if not any(beats(rival, (held, length)) for rival in rivals):
+            found[place] = (state, length, held)
         if new:
             gaps.append(stale + 1)
             stale = 0
@@ -133,7 +140,8 @@ def worker(connection, settings, seed):
     known = {}
     while (task := connection.recv()) is not None:
         start, start_state, start_path_length, updates = task
-        known.update(updates)
+        for place, visit in updates:
+            known.setdefault(place, []).append(visit)
         connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length))
 
 
@@ -150,7 +158,7 @@ class Explorers:
         self.count = count
 
     def send(self, worker_index, start, start_state, start_path_length, updates):
-        """updates is the main process's full, append-only log of (place, path length) updates."""
+        """updates is the main process's full, append-only log of (place, (holdings, path length)) updates."""
         self._connections[worker_index].send((start, start_state, start_path_length,
                                               updates[self._updates_sent[worker_index]:]))
         self._updates_sent[worker_index] = len(updates)

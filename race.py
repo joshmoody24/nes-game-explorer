@@ -19,6 +19,7 @@ MILESTONES = {
     "missiles": lambda line: line["max missiles"] > 0,
     "64 rooms": lambda line: line["rooms"] >= 64,
     "Norfair": lambda line: "Norfair" in line["areas"],
+    "long beam": lambda line: "long beam" in line["items"],
     "128 rooms": lambda line: line["rooms"] >= 128,
     "bombs": lambda line: "bombs" in line["items"],
     "energy tank": lambda line: line["energy tanks"] > 0,
@@ -49,14 +50,13 @@ def main():
         results[label] = [[json.loads(line) for line in open(Path("runs") / name / "metrics.jsonl")]
                           for name, _ in processes]
 
-    print(f"median seconds to reach each milestone over {SEEDS} seeds ('-' = not reached by all), "
-          f"plus final rooms and frames/sec")
+    print(f"seeds reaching each milestone of {SEEDS}, @ median seconds among those, plus final rooms and frames/sec")
     print(f"{'':>14}" + "".join(f"{milestone:>12}" for milestone in MILESTONES) + f"{'rooms':>8}{'frames/s':>10}")
     for label, runs in results.items():
         cells = []
         for reached in MILESTONES.values():
-            times = [first_time(lines, reached) for lines in runs]
-            cells.append("-" if None in times else f"{statistics.median(times):.0f}")
+            times = [t for t in (first_time(lines, reached) for lines in runs) if t is not None]
+            cells.append(f"{len(times)}/{SEEDS}" + (f"@{statistics.median(times):.0f}" if times else ""))
         rooms = statistics.median(lines[-1]["rooms"] for lines in runs)
         speed = statistics.median(lines[-1]["frames per second"] for lines in runs)
         print(f"{label:>14}" + "".join(f"{cell:>12}" for cell in cells) + f"{rooms:>8.0f}{speed:>10,.0f}")
