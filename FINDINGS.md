@@ -199,3 +199,23 @@ the frontier is a bottleneck.
 - **Recordings** (`go_explore --record FRACTION`, default 0.1): a 30-s run saved 4,410 segments
   (~87 steps each). `python -m checks.replay_check`: 200 of 200 sampled recordings match their
   start-state checksum and replay to identical memory twice.
+
+## 2026-11-25: first learned player (hindsight goal reaching)
+
+`python -m checks.policy_trips_check policy-data 4000 300` (run under `tools/capped 16G`). Data: a 5-min
+run recording 20% of segments (96,590 recordings, 7.5M steps); trained on 4,000 recordings (312K steps,
+~3,080 varying bytes), 5,000 updates. Test A: 164 short trips (goal 10-30 steps ahead on held-out
+recordings, 2x that many steps, 25% sticky actions); places used only to judge.
+
+- **Shortcut found and removed.** First version: loss 1.42 (3.22 = guessing), heavy use of the goal
+  (swapping goals raised loss to 3.8), yet no better than random at trips (52% vs 45%; closed 53-59% of
+  distance vs random's 63%). Cause: $0014 (the game's controller state) reveals the button just pressed
+  100% of the time, so the model copied the goal's held button. `experience.input_echo_bytes` now drops,
+  from data alone, any byte that predicts the pressed button >= 90% of the time (here exactly one).
+- After the fix: loss 2.22 train / 2.44 held out (generalizes). Trips reached: learned (sampled) 60%,
+  closing 75% of distance; most-likely-button 46%; random 45% (63%); exact replay of the recorded
+  buttons 92% (94%). Short trips barely suffer from sticky noise when replayed.
+- Memory: a data loader that indexed an npz inside a loop hit 52 GB (each slice kept a full copy).
+  Fixed; runs now use `tools/capped` (systemd scope with MemoryMax).
+- Timing: building data 10K steps/s (replay + 10 KB memory copy per step); training 63 updates/s on CPU
+  (batch 512, ~9,240 inputs); one learned decision ~360 us vs ~80 us per emulator step.

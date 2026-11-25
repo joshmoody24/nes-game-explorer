@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Runs a command under a hard memory cap, so a runaway experiment gets killed instead of the machine
+# running out of memory. Usage: tools/capped <limit, e.g. 16G> <command> [args...]
+set -euo pipefail
+limit="$1"
+shift
+exec systemd-run --user --scope --quiet -p MemoryMax="$limit" -p MemorySwapMax=0 "$@"
