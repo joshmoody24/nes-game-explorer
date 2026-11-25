@@ -599,3 +599,10 @@ spendables.
   nothing generic says missiles matter more; only the door does.
 - Testing instead: **one exploration per detected spendable** (portfolio: each hoards only its own byte),
   4 x 4 workers x 25 min from the first missiles, stopping at the Long Beam.
+- **Portfolio works** (`runs/portfolio/`): from the first missiles, one exploration per automatically
+  detected spendable (top 4), 4 workers each, 25 min, stop at the Long Beam:
+  byte 35: 103 rooms, energy tank; byte 40: 76 rooms; energy tens: 83 rooms; **missiles: Long Beam at
+  941 s** (85 rooms). No resource named by hand: hoarding each candidate separately, and letting whichever
+  branch opens something new win, avoids having to know which resource matters. Still hand-given: the layer
+  start state, the "top 4" cutoff, and hand-made places. No NES Zelda ROM on unit (Josh to provide) so the
+  Zelda rule can't be measured yet.
