@@ -81,3 +81,20 @@ Races: `python race.py <name> <minutes> "<label>=<flags>" ...` (3 seeds x 6 work
   new places need 50+ steps of effort since the previous one, 1% need 94+ (measured over a 90 s run).
 - 300-step segments are slightly worse than 100 (15-17 vs 17-19 rooms, 880-970 vs 1000-1080 places,
   all 3 seeds agreeing).
+
+## 2026-11-24: the "red door wall" was two bugs and one real problem
+
+- **Bug: SELECT was left out of the button set** ("it just switches weapons"), so missiles could never
+  be fired: all 8,558 states of the first 30-min run had the beam selected and 0 or 5 missiles. Fixed;
+  the only excluded button is now START. Lesson: never prune actions with game knowledge.
+- **Bug: the room count double-counted Brinstar.** The area byte reads $00 or $10 for Brinstar; 57 of
+  139 "rooms" in one checkpoint were duplicates (81 real map cells). Every room count before this entry
+  is inflated ~1.7x. Areas now use the low 4 bits, in both progress and hand-made places.
+- **Real problem: missiles get spent before they're needed.** 30-min run with SELECT
+  (`runs/baseline-select`, 895M frames, 12,261 places): reached 10 max missiles (vs 5) but no Bombs,
+  tanks or bosses. Its archive shows missiles fired often but almost always to empty: (max 5, 0 left)
+  3,732 states vs (5, 5) 59; (10, 0) 1,346 vs at most 5 left with max 10. A place keeps its first state,
+  and "here with missiles" equals "here without", so red doors are reached empty-handed. This is the
+  wall Antithesis fixed by hand ("prefer more missiles"); we need a generic way to notice resources.
+- The stall rule (archive growth under 1% in 10 min) never fired: places grew 57% in the last 10 min
+  while items stayed flat. New places are cheap; it measures wandering, not progress.

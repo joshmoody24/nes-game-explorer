@@ -14,17 +14,18 @@ from multiprocessing.connection import wait
 import numpy as np
 
 from emulator import Emulator, button_mask
-from metroid import (AREA, ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES, ROOM_X, ROOM_Y,
-                     at)
+from metroid import (CURRENT_MISSILES, ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES,
+                     ROOM_X, ROOM_Y, area_of, at)
 from progress import Progress
 
 ROM = "roms/metroid.nes"
 FRAMES_PER_STEP = 4
 PROGRESS_SAMPLE_EVERY = 25
-# START pauses the game and SELECT switches weapons; both are left out.
+# Every button except START, which pauses on most NES games. Don't prune by guessing what a button does in
+# one game: leaving out SELECT (Metroid's missile switch) once made every red door impossible to open.
 ACTIONS = [button_mask(*direction, *buttons)
            for direction in [(), ("LEFT",), ("RIGHT",), ("UP",), ("DOWN",)]
-           for buttons in [(), ("A",), ("B",), ("A", "B")]]
+           for buttons in [(), ("A",), ("B",), ("A", "B"), ("SELECT",)]]
 
 
 @dataclass(frozen=True)
@@ -37,13 +38,16 @@ class Settings:
     repeat_probability: float = 0.9
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
     selection: str = "least chosen"  # or "productive": also favor places that recently led somewhere new
+    # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
+    current_missiles: bool = False
 
 
-def hand_made_place(memory, block_size):
+def hand_made_place(memory, settings):
     """Area, room, Samus's rough position in the room, and progress counters."""
-    return (int(memory[AREA]), int(memory[MAP_Y]), int(memory[MAP_X]),
-            int(memory[ROOM_X]) // block_size, int(memory[ROOM_Y]) // block_size,
-            int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5)
+    return (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]),
+            int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size,
+            int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5,
+            int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None)
 
 
 @dataclass
@@ -69,7 +73,7 @@ def explore(emulator, rng, settings, known, start, start_state):
         memory = emulator.view(state)
         if memory[GAME_MODE] == GAME_OVER:
             break
-        place = hand_made_place(memory, settings.block_size)
+        place = hand_made_place(memory, settings)
         if place in known or place in found:
             stale += 1
             if settings.stale_steps is not None and stale >= settings.stale_steps:

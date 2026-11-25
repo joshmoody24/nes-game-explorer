@@ -5,12 +5,13 @@ from emulator import button_mask
 PLAYING = 3  # values of the main routine index $001E; picking up an item briefly switches to 9 (wait timer)
 GAME_OVER = 4
 GAME_MODE = 0x1E
-AREA = 0x74
+AREA = 0x74  # low 4 bits name the area (0 Brinstar, 1 Norfair, 2 Kraid, 3 Tourian, 4 Ridley); Brinstar shows as $00 and $10
 MAP_Y, MAP_X = 0x4F, 0x50
 ROOM_Y, ROOM_X = 0x30D, 0x30E
 ITEMS = 0x6878
 ENERGY_TANKS = 0x6877
 MAX_MISSILES = 0x687A
+CURRENT_MISSILES = 0x6879
 KRAID_STATUE, RIDLEY_STATUE = 0x687B, 0x687C
 
 
@@ -30,3 +31,7 @@ def start_game(emulator):
             return emulator.save()
         emulator.run()
     raise RuntimeError(f"Game never reached play mode; $001E = {emulator.ram[GAME_MODE]}")
+
+
+def area_of(memory):
+    return int(memory[AREA]) & 0x0F

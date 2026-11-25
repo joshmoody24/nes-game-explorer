@@ -8,12 +8,12 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from metroid import (AREA, ENERGY_TANKS, GAME_MODE, ITEMS, KRAID_STATUE, MAP_X, MAP_Y, MAX_MISSILES, PLAYING,
-                     RIDLEY_STATUE, at)
+from metroid import (ENERGY_TANKS, GAME_MODE, ITEMS, KRAID_STATUE, MAP_X, MAP_Y, MAX_MISSILES, PLAYING,
+                     RIDLEY_STATUE, area_of, at)
 
 ITEM_BITS = {0x01: "bombs", 0x02: "high jump", 0x04: "long beam", 0x08: "screw attack",
              0x10: "morph ball", 0x20: "varia", 0x40: "wave beam", 0x80: "ice beam"}
-AREAS = {0x00: "Brinstar", 0x10: "Brinstar", 0x11: "Norfair", 0x12: "Kraid", 0x13: "Tourian", 0x14: "Ridley"}
+AREAS = {0: "Brinstar", 1: "Norfair", 2: "Kraid", 3: "Tourian", 4: "Ridley"}
 
 
 @dataclass
@@ -45,8 +45,8 @@ class Progress:
         self.layouts.add(hash(nametable))
         if memory[GAME_MODE] != PLAYING:
             return
-        self.rooms.add((int(memory[AREA]), int(memory[MAP_Y]), int(memory[MAP_X])))
-        self.areas.add(AREAS.get(int(memory[AREA]), hex(memory[AREA])))
+        self.rooms.add((area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X])))
+        self.areas.add(AREAS.get(area_of(memory), str(area_of(memory))))
         self.items |= int(memory[at(ITEMS)])
         self.max_tanks = max(self.max_tanks, int(memory[at(ENERGY_TANKS)]))
         self.max_missiles = max(self.max_missiles, int(memory[at(MAX_MISSILES)]))

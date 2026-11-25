@@ -55,8 +55,28 @@ class Archive:
         return index
 
 
+def stalled(history, now, window_seconds):
+    """history: [(time, archive size)]. True once the archive grew by under 1% over the last window."""
+    if window_seconds is None or now - history[0][0] < window_seconds:
+        return False
+    size_then = next(size for when, size in reversed(history) if now - when >= window_seconds)
+    return history[-1][1] < size_then * 1.01
+
+
 def directory_gigabytes(path):
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e9
+
+
+def resumed_archive(run_name, settings, emulator):
+    """An earlier run's saved states, re-sorted into places under the current settings."""
+    saved = pickle.loads(zlib.decompress((RUNS / run_name / "checkpoint.pkl.z").read_bytes()))
+    archive, seen = Archive(settings.selection), set()
+    for state in saved["states"]:
+        place = hand_made_place(emulator.view(state), settings)
+        if place not in seen:
+            seen.add(place)
+            archive.add(place, state)
+    return archive
 
 
 def checkpoint(run_dir, archive):
@@ -72,9 +92,16 @@ def parse_arguments():
     parser.add_argument("--minutes", type=float, default=4)
     parser.add_argument("--workers", type=int, default=18)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--resume", help="start from this run's checkpointed archive")
+    parser.add_argument("--stop-after-stall", type=float, metavar="MINUTES",
+                        help="also stop once the archive grew by less than 1%% over the last MINUTES")
     for setting in dataclasses.fields(Settings):
-        kind = int if setting.default is None else type(setting.default)  # the only optional setting is an int
-        parser.add_argument("--" + setting.name.replace("_", "-"), type=kind, default=setting.default)
+        flag = "--" + setting.name.replace("_", "-")
+        if isinstance(setting.default, bool):
+            parser.add_argument(flag, action="store_true")
+        else:
+            kind = int if setting.default is None else type(setting.default)  # the only optional setting is an int
+            parser.add_argument(flag, type=kind, default=setting.default)
     args = parser.parse_args()
     settings = Settings(**{f.name: getattr(args, f.name) for f in dataclasses.fields(Settings)})
     return args, settings
@@ -90,7 +117,9 @@ def prepare_run_dir(args, settings):
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True)
     (run_dir / "config.json").write_text(json.dumps(
-        {"minutes": args.minutes, "workers": args.workers, "seed": args.seed} | dataclasses.asdict(settings),
+        {"minutes": args.minutes, "workers": args.workers, "seed": args.seed, "resume": args.resume,
+         "stop_after_stall": args.stop_after_stall}
+        | dataclasses.asdict(settings),
         indent=2))
     return run_dir
 
@@ -100,8 +129,11 @@ def main():
     run_dir = prepare_run_dir(args, settings)
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = start_game(emulator)
-    archive = Archive(settings.selection)
-    archive.add(hand_made_place(emulator.memory(start), settings.block_size), start)
+    if args.resume:
+        archive = resumed_archive(args.resume, settings, emulator)
+    else:
+        archive = Archive(settings.selection)
+        archive.add(hand_made_place(emulator.view(start), settings), start)
     known = set(archive.places)
     progress = Progress()
     rng = np.random.default_rng(args.seed)
@@ -117,6 +149,8 @@ def main():
         assign(worker_index)
     started = last_log = last_checkpoint = time.perf_counter()
     deadline = started + args.minutes * 60
+    stall_window = args.stop_after_stall * 60 if args.stop_after_stall else None
+    sizes = [(started, len(archive.places))]
     with open(run_dir / "metrics.jsonl", "a") as metrics:
         while time.perf_counter() < deadline:
             for worker_index, segment in explorers.finished():
@@ -138,6 +172,10 @@ def main():
                 metrics.write(json.dumps(line) + "\n")
                 metrics.flush()
                 last_log = now
+                sizes.append((now, len(archive.places)))
+                if stalled(sizes, now, stall_window):
+                    print(f"stopping: archive grew under 1% in the last {args.stop_after_stall} minutes", flush=True)
+                    break
             if now - last_checkpoint > CHECKPOINT_EVERY_SECONDS:
                 checkpoint(run_dir, archive)
                 last_checkpoint = now
