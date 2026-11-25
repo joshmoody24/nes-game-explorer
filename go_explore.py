@@ -43,13 +43,14 @@ class Archive:
     updates: list = field(default_factory=list)  # append-only (place, score) log that workers sync from
 
     def offer(self, place, state, score):
-        """Keeps state if place is new or score beats the kept state's. Returns True if the place is new."""
+        """Keeps state if place is new or score beats the kept state's. Returns "new", "improved" or None."""
         if place in self.index:
             i = self.index[place]
             if score > self.scores[i]:
                 self.states[i], self.scores[i] = state, score
                 self.updates.append((place, score))
-            return False
+                return "improved"
+            return None
         self.index[place] = len(self.places)
         self.places.append(place)
         self.states.append(state)
@@ -57,13 +58,19 @@ class Archive:
         self.times_chosen.append(0)
         self.discoveries.append(0)
         self.updates.append((place, score))
-        return True
+        return "new"
 
     def choose(self, rng):
         chosen = np.array(self.times_chosen)
         weights = 1 / np.sqrt(1 + chosen)
-        if self.selection == "productive":
+        if self.selection in ("productive", "powerful"):
             weights *= 1 + np.array(self.discoveries) / (1 + chosen)
+        if self.selection == "powerful":
+            # Explore more from stronger states (safer, better armed), so new places are first reached
+            # by healthy lineages. Scores are rescaled to 0-1 so any keep rule's scale works.
+            scores = np.array(self.scores, dtype=float)
+            spread = scores.max() - scores.min()
+            weights *= 0.2 + ((scores - scores.min()) / spread if spread > 0 else 0)
         index = int(rng.choice(len(self.places), p=weights / weights.sum()))
         self.times_chosen[index] += 1
         return index
@@ -146,7 +153,7 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = start_game(emulator)
     if args.resume:
-        assert "empowerment" not in settings.keep, "resuming would mean measuring empowerment for every saved state"
+        assert settings.keep in ("first", "more-missiles"), "resuming would mean replay-scoring every saved state"
         archive = resumed_archive(args.resume, settings, emulator)
     else:
         archive = Archive(settings.selection)
@@ -175,9 +182,11 @@ def main():
                 frames += segment.frames
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
-                new_places = sum(archive.offer(place, state, state_score)
-                                 for place, (state, state_score) in segment.found.items())
-                archive.discoveries[segment.start] += new_places
+                outcomes = [archive.offer(place, state, state_score)
+                            for place, (state, state_score) in segment.found.items()]
+                new_places = outcomes.count("new")
+                # A stronger state for a known place (healed, rearmed) counts as progress, like a new place.
+                archive.discoveries[segment.start] += new_places + outcomes.count("improved")
                 segment_log["start"].append(segment.start)
                 segment_log["new_places"].append(new_places)
                 segment_log["frames"].append(segment.frames)

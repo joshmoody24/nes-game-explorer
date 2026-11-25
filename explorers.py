@@ -16,7 +16,7 @@ import numpy as np
 
 from controls import ACTIONS, FRAMES_PER_STEP
 from emulator import Emulator
-from empowerment import controllable_bits
+from empowerment import controllable_bits, lost_control_rate
 from metroid import (CURRENT_MISSILES, ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES,
                      ROOM_X, ROOM_Y, area_of, at)
 from progress import Progress
@@ -34,19 +34,22 @@ class Settings:
     # sustained moves (a full jump, a run across a room) instead of jittering in place.
     repeat_probability: float = 0.9
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
-    selection: str = "least-chosen"  # or "productive": also favor places that recently led somewhere new
+    # "least-chosen"; "productive": also favor places whose trips found new places or stronger states;
+    # "powerful": productive, and also favor places whose kept state scores high under the keep rule.
+    selection: str = "least-chosen"
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
     # Which state a place keeps: "first" (the first one seen); "empowerment" (the state from which my
     # actions change the most memory bits, see empowerment.py); "rare-empowerment" (the same, with each
-    # bit weighted by how rarely it is changeable, so scarce abilities like ammo count most); or, as a
-    # hand-given diagnostic, "more-missiles" (replace it whenever a visit arrives with more missiles).
+    # bit weighted by how rarely it is changeable, so scarce abilities like ammo count most); "safety" (the
+    # state from which random play least often ends with my buttons doing nothing, i.e. furthest from
+    # death); or, as a hand-given diagnostic, "more-missiles" (whenever a visit arrives with more missiles).
     keep: str = "first"
 
     def __post_init__(self):
         # Catches typos in flags, which would otherwise silently fall back to the default behavior.
-        assert self.keep in ("first", "empowerment", "rare-empowerment", "more-missiles"), f"unknown keep {self.keep!r}"
-        assert self.selection in ("least-chosen", "productive"), f"unknown selection {self.selection!r}"
+        assert self.keep in ("first", "empowerment", "rare-empowerment", "safety", "more-missiles"), f"unknown keep {self.keep!r}"
+        assert self.selection in ("least-chosen", "productive", "powerful"), f"unknown selection {self.selection!r}"
 
 
 def hand_made_place(memory, settings):
@@ -58,8 +61,8 @@ def hand_made_place(memory, settings):
 
 
 def score(memory, settings):
-    """Higher-scoring states replace lower ones in the same place. Empowerment is scored separately, after a
-    segment, because measuring it costs replays."""
+    """Higher-scoring states replace lower ones in the same place. Keep rules measured by replays are scored
+    separately, after a segment (see replay_scorer), because replays are expensive."""
     return int(memory[at(CURRENT_MISSILES)]) if settings.keep == "more-missiles" else 0
 
 
@@ -101,7 +104,16 @@ class Segment:
     gaps: list  # for each new place, steps since the previous new place (or since the segment began)
 
 
-def explore(emulator, rng, settings, known, start, start_state, empowerment=None):
+def replay_scorer(settings):
+    """For keep rules measured by replays after a segment: a function (emulator, rng, state) -> score, or None."""
+    if settings.keep in ("empowerment", "rare-empowerment"):
+        return Empowerment(weighted=settings.keep == "rare-empowerment")
+    if settings.keep == "safety":
+        return lambda emulator, rng, state: 1 - lost_control_rate(emulator, state, rng)
+    return None
+
+
+def explore(emulator, rng, settings, known, start, start_state, replay_score=None):
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
     action = rng.integers(len(ACTIONS))
@@ -133,11 +145,11 @@ def explore(emulator, rng, settings, known, start, start_state, empowerment=None
                 break
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
-    if empowerment:
-        found = {place: (state, empowerment(emulator, rng, state)) for place, (state, _) in found.items()}
+    if replay_score:
+        found = {place: (state, replay_score(emulator, rng, state)) for place, (state, _) in found.items()}
         if revisit:
             place, state = revisit
-            state_score = empowerment(emulator, rng, state)
+            state_score = replay_score(emulator, rng, state)
             if state_score > known[place]:
                 found[place] = (state, state_score)
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps)
@@ -147,12 +159,11 @@ def worker(connection, settings, seed):
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     rng = np.random.default_rng([seed, os.getpid()])
     known = {}
-    empowerment = (Empowerment(weighted=settings.keep == "rare-empowerment")
-                   if settings.keep in ("empowerment", "rare-empowerment") else None)
+    replay_score = replay_scorer(settings)
     while (task := connection.recv()) is not None:
         start, start_state, updates = task
         known.update(updates)
-        connection.send(explore(emulator, rng, settings, known, start, start_state, empowerment))
+        connection.send(explore(emulator, rng, settings, known, start, start_state, replay_score))
 
 
 class Explorers:

@@ -141,3 +141,28 @@ Races: `python race.py <name> <minutes> "<label>=<flags>" ...` (3 seeds x 6 work
   so adding "rare" bytes to places would explode the archive.
 - Supply looks like the real limit: random play spends missiles within seconds, so full-ammo states are
   ~1-2% of states with capacity in every run, whatever the keep rule.
+
+## 2026-11-24: vitals, safety, and the limits of short random probes
+
+- **Resource proxy** ("my buttons change it, it holds still when I do nothing";
+  `python -m checks.resource_vital_check`): cuts 2,497 sometimes-changeable bytes to 158; current
+  missiles, weapon and max missiles pass, items barely miss (80% still), plus ~150 others (mostly $62xx-$63xx).
+- **Generic danger** (share of random-play replays that end with buttons changing < 20 bits): agrees
+  with real game over in 84% of states. It exposed that archives are mostly near death: 387 of 400
+  sampled states had energy 0-9. Final archives, share of states at energy 0-2: keep-first 95%,
+  empowerment 82%, rare-empowerment 69%, safety keep 66%, safety + powerful selection 71%.
+- **Keeping the safest state per place** (`runs/safety-15min`): only modestly healthier by the end
+  (its 5-min checkpoint looked much better, median energy 6, but that was early-archive bias).
+  Supply again: healthy states rarely arrive to be kept.
+- **Favoring stronger states when choosing where to explore** (`--selection powerful`,
+  `runs/safety-powerful-15min`): 1.5-2.5 min behind on every milestone, 89 rooms, no healthier. A bias
+  toward safe states pulls exploration away from the frontier. Failed lever.
+- **Counterfactual edits with short random replays** (`python -m checks.counterfactual_check`): nearly
+  blind. Editing current missiles changes empowerment by 0.4%, health by <1%; weapon 7%, items 4%. Of
+  383 proxy-flagged bytes, 1% have an effect over 5%. Short random play rarely fires missiles or dies,
+  so it can't reveal what only matters over longer, purposeful play.
+- **Learned danger from raw memory** (`vitals.py`, `python -m checks.danger_model_check`): trained on
+  4,000 states labeled by random play (lost control in 53% of replays). Held-out AUC 0.73. Raising
+  health from <=5 to 29 lowered predicted danger in 100% of 2,827 states (median -0.03); editing 200
+  random other bytes changed it by 0.00, none as much as healing. Deaths are common, so this signal is
+  dense enough to learn "health matters" from random play; the effect is consistent but small.
