@@ -111,11 +111,8 @@ class GoalPolicy:
 _logits = jax.jit(logits)
 
 
-def train(experience, key, updates=5000, batch=512, chunk=100, log=print):
-    """
-    Trains on the default device (the GPU when there is one), with the whole dataset copied there once.
-    chunk: updates per compiled call. The ROCm plugin (0.12.0) crashes on compiled loops of ~300+ updates.
-    """
+def train(experience, key, updates=5000, batch=512, chunk=1000, log=print):
+    """Trains on the default device (the GPU when there is one), with the whole dataset copied there once."""
     init_key, key = jax.random.split(key)
     params = init_params(init_key, 3 * len(experience.byte_indices), len(ACTIONS))
     optimizer_state = OPTIMIZER.init(params)

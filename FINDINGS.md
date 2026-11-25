@@ -238,3 +238,17 @@ packages only the CUDA plugins. Devshell sets ROCM_PATH, no preallocation, max 9
   (100 per call works; disabling command buffers only moves the limit), and every JAX process
   segfaults at interpreter exit (exit code 139), even after a bare `import jax`; results are unaffected.
 - New bottleneck: building training data by replay, ~9,500 steps/s in one process.
+
+## 2026-11-25: the GPU crashes were a ROCm version mismatch
+
+AMD's `jax-rocm7` 0.11.2-0.12.1 plugins are built for ROCm 7.14.x (PyPI summary: "ROCm:7.14.0"); nixpkgs
+has ROCm 7.2.4. On nixpkgs' ROCm, core dumps showed the mid-run crashes in
+`rocr::core::Runtime::AsyncEventsLoop` (libhsa-runtime64) and the exit crash in an `amd::smi` destructor
+during exit handlers. `nix/jax-rocm.nix` now runs the plugin on AMD's own ROCm 7.14.0 nightly wheels
+(`rocm_sdk_core` + `rocm_sdk_libraries_gfx110x_all` 7.14.0a20260612 from rocm.nightlies.amd.com/v2/
+gfx110X-all, ~1.4 GB; the older gfx110X-dgpu folder stopped at 7.10), which also ship AMD's real
+`librocm_sysdeps_*`, so the libdrm/libnuma rebuild is gone. On the matched runtime: queued executions,
+1,000-update compiled loops and interpreter exit all exit 0. Steady-state training (synthetic data,
+`python -m checks.train_speed_check 512 1000`): ~460 updates/s at batch 512 vs PyTorch's 767.
+Caveat: nightly wheels may disappear from AMD's index; the pinned hashes keep builds reproducible while
+the files are in the store. Stable 7.13.0 exists on repo.amd.com/rocm/whl/gfx110X-all.
