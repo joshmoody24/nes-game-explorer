@@ -399,3 +399,21 @@ Seed noise check (hindsight students on the cached 20K-trip teacher, 600 held-ou
 The earlier 68% (10K trips) was a lucky draw; seeds and data move results ~3 points. Distilled students
 sit at ~63-66%, a few points over random-play-trained players (60-65%) and well under the teacher (73%).
 Short-trip success is not where big gains are; next is chaining trips from power-on (Test B).
+
+## 2026-11-25: Test B, start of game to Morph Ball, no save states (`chase.py`, 100 attempts, sticky 0.25)
+
+| setup | reached Morph Ball |
+|---|---|
+| archive chain as waypoints (4), any player | 0% (best learned attempt: 3/4 waypoints) |
+| clean stitched route (`route.py`, 132 steps), waypoints every 10 steps, distilled student | 7% |
+| same route shortened to 101 steps (coarse-to-fine waypoints) | **25%** (spacing 20: 20%) |
+| + one round of practice around the route (`practice.py`) | **70%** (rounds 2-3: 62%, 67%) |
+
+- Per-hop test on the archive chain: the learned player handles 3 of 4 hops (76-82%) but the 2nd hop's
+  waypoint (an odd mid-jump spot exploration happened to save) is 0-5% for every player, even search with
+  the true distance. The route, not the player, was the main bottleneck.
+- Route stitching: grow a replayable path hop by hop from the best (furthest, soonest) of 200 attempts.
+  Shortening re-stitches with the path's own states as waypoints, sparse first (dense waypoints make the
+  player retrace detours): 132 -> 101 steps, about 6.7 s of game time. Still some dawdling.
+- Practice: from 1000 random route points knocked off by 0-15 random buttons, keep the fastest of 8
+  attempts to rejoin 1-3 waypoints ahead (95-100% recover); retrain (hindsight) on teacher trips + these.
