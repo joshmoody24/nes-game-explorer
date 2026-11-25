@@ -1,16 +1,17 @@
 """
 Distilling search into a player that needs no save states (AlphaZero-style). A learned distance guides a
-search teacher that tries every button in the emulator; the teacher's goal-directed trips become
-recordings; the no-lookahead player is trained on them (with hindsight relabeling, like random-play
-recordings) and scored on held-out trips without any lookahead.
+search teacher that tries every button in the emulator; the teacher's goal-directed trips become lessons
+for a no-lookahead player, which is scored on held-out trips without any lookahead. The teacher (distance
+and trips) is cached in cache/, so student experiments skip the slow part.
 
 Usage: python distill.py <run name> [--distance-train N] [--distance-updates N] [--trips N]
-                         [--policy-train N] [--policy-updates N] [--eval N] [--hold N]
+                         [--policy-updates N] [--eval N] [--hold N]
 """
 
 import argparse
 import dataclasses
 import os
+import pickle
 import time
 from pathlib import Path
 
@@ -21,18 +22,38 @@ import distance
 import policy
 import trips
 from emulator import Emulator
-from experience import build, choose_bytes, valid_recordings
+from experience import build, valid_recordings
 from explorers import ROM
+
+
+def cached(path, compute):
+    if path.exists():
+        return pickle.loads(path.read_bytes())
+    result = compute()
+    path.parent.mkdir(exist_ok=True)
+    path.write_bytes(pickle.dumps(result))
+    return result
+
+
+def make_teacher(emulator, training, args):
+    """(distance class, parameters, byte indices, lesson trips, their outcomes)."""
+    started = time.perf_counter()
+    experience = build(emulator, training, on_device=True)
+    judge = distance.train(experience, jax.random.key(0), updates=args.distance_updates, log=lambda _: None)
+    experience = None
+    lessons = trips.from_recordings(training, np.random.default_rng(2), args.trips, player="search-learned")
+    outcomes = trips.run(lessons, judge, search_hold=args.hold)
+    print(f"made the teacher and its {len(lessons)} trips [{time.perf_counter() - started:.0f}s]", flush=True)
+    return judge.host_params(), judge.byte_indices, lessons, outcomes
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("run")
-    parser.add_argument("--distance-train", type=int, default=60000)
-    parser.add_argument("--distance-updates", type=int, default=40000)
-    parser.add_argument("--trips", type=int, default=20000, help="teacher trips to learn from")
-    parser.add_argument("--policy-train", type=int, default=20000, help="random-play recordings mixed in")
-    parser.add_argument("--policy-updates", type=int, default=20000)
+    parser.add_argument("--distance-train", type=int, default=20000)
+    parser.add_argument("--distance-updates", type=int, default=20000)
+    parser.add_argument("--trips", type=int, default=10000, help="teacher trips to learn from")
+    parser.add_argument("--policy-updates", type=int, default=10000)
     parser.add_argument("--eval", type=int, default=600)
     parser.add_argument("--hold", type=int, default=4)
     args = parser.parse_args()
@@ -40,34 +61,35 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     recordings = valid_recordings(Path("runs") / args.run)
     np.random.default_rng(0).shuffle(recordings)
-    held_out = recordings[args.distance_train:]
-    training = recordings[:args.distance_train]
-    byte_indices = choose_bytes(emulator, training[:20000])
+    training, held_out = recordings[:args.distance_train], recordings[args.distance_train:]
     evaluation = trips.from_recordings(held_out, np.random.default_rng(1), args.eval)
-
-    started = time.perf_counter()
-    experience = build(emulator, training, byte_indices, on_device=True)
-    judge = distance.train(experience, jax.random.key(0), updates=args.distance_updates, log=lambda _: None)
-    experience = None
+    name = f"teacher-v2-{args.run}-{args.distance_train}-{args.distance_updates}-{args.trips}-{args.hold}.pkl"
+    params, byte_indices, lessons, outcomes = cached(Path("cache") / name, lambda: make_teacher(emulator, training, args))
+    judge = distance.Distance(params, byte_indices)
     teacher_eval = trips.run([dataclasses.replace(t, player="search-learned") for t in evaluation], judge,
                              search_hold=args.hold)
-    print(f"distance from {len(training)} recordings [{time.perf_counter() - started:.0f}s]; "
-          f"search teacher: {trips.summary(teacher_eval)}", flush=True)
+    print(f"search teacher: {trips.summary(teacher_eval)}; on its own lessons it {trips.summary(outcomes)}", flush=True)
 
-    started = time.perf_counter()
-    lessons = trips.from_recordings(training, np.random.default_rng(2), args.trips, player="search-learned")
-    outcomes = trips.run(lessons, judge, search_hold=args.hold)
-    taught = [(trip.start, np.frombuffer(outcome.actions, np.uint8)) for trip, outcome in zip(lessons, outcomes)]
-    print(f"teacher made {len(taught)} trips [{time.perf_counter() - started:.0f}s]; they {trips.summary(outcomes)}",
-          flush=True)
-
-    for name, data in [("random play only", training[:args.policy_train]),
-                       ("random play + teacher trips", training[:args.policy_train] + taught),
-                       ("teacher trips only", taught)]:
-        experience = build(emulator, data, byte_indices, on_device=True)
-        player = policy.train(experience, jax.random.key(1), updates=args.policy_updates, log=lambda _: None)
-        experience = None
-        print(f"player trained on {name}: {trips.summary(trips.run(evaluation, player))}", flush=True)
+    taught = [(trip.start, np.frombuffer(o.actions, np.uint8)) for trip, o in zip(lessons, outcomes)]
+    experience = build(emulator, taught, byte_indices, on_device=True)
+    goals = np.stack([trip.goal for trip in lessons])
+    button_scores = np.concatenate([o.search_scores for o in outcomes])
+    students = {  # name: (training, player that evaluates it)
+        "hindsight goals, buttons as pressed": (lambda key: policy.train(
+            experience, key, updates=args.policy_updates, log=lambda _: None), "learned"),
+        "teacher's goals, scores for every button": (lambda key: policy.train_aimed(
+            experience, button_scores, goals, key, updates=args.policy_updates, loss=policy.value_loss,
+            log=lambda _: None), "learned-greedy"),
+        # Only differences between buttons decide a move; the shared level (how far the goal is) would
+        # otherwise dominate the regression.
+        "teacher's goals, scores relative to the average button": (lambda key: policy.train_aimed(
+            experience, button_scores - button_scores.mean(1, keepdims=True), goals, key,
+            updates=args.policy_updates, loss=policy.value_loss, log=lambda _: None), "learned-greedy"),
+    }
+    for student, (train, player_kind) in students.items():
+        player = train(jax.random.key(1))
+        outcomes = trips.run([dataclasses.replace(t, player=player_kind) for t in evaluation], player)
+        print(f"student ({student}): {trips.summary(outcomes)}", flush=True)
 
 
 if __name__ == "__main__":

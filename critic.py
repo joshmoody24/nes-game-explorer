@@ -12,7 +12,7 @@ import numpy as np
 import optax
 
 from controls import ACTIONS
-from training import TRAINING_DTYPE, CpuModel, fit, init_mlp, mlp, sample_on_device
+from training import TRAINING_DTYPE, CpuModel, device_data, fit, init_mlp, mlp, sample_on_device
 
 HIDDEN = (512, 256)
 EMBEDDING = 64
@@ -57,4 +57,4 @@ def train(experience, key, updates=20000, batch=1024, log=print):
     state_key, goal_key, key = jax.random.split(key, 3)
     params = {"state_action": init_mlp(state_key, (width + len(ACTIONS), *HIDDEN, EMBEDDING)),
               "goal": init_mlp(goal_key, (width, *HIDDEN, EMBEDDING))}
-    return Critic(fit(loss, params, experience, key, updates, batch, sampler=sample, log=log), experience.byte_indices)
+    return Critic(fit(loss, params, device_data(experience), key, updates, batch, sampler=sample, log=log), experience.byte_indices)

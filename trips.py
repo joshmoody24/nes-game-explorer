@@ -39,6 +39,8 @@ class Outcome:
     start_distance: float
     closest_distance: float
     actions: bytes  # every button pressed (after sticky noise), so the trip can be replayed
+    chosen: bytes  # the button the player chose at each step, before sticky noise
+    search_scores: np.ndarray | None  # search players: [steps, buttons] how good each button looked (higher better)
 
 
 @dataclass(frozen=True)
@@ -69,7 +71,7 @@ def _searched(setup, goal, judge, rng):
     Search player: try every button for setup.search_hold steps from the current state and keep the best
     outcome: judge is "bytes" (most memory bytes matching the goal), "learned" (smallest learned distance),
     or "true" (diagnostic: smallest hand-made place distance). Uses save states: a teacher for training,
-    not a way to play.
+    not a way to play. Returns the button and every button's score.
     """
     emulator = workers.emulator()
     start = emulator.save()
@@ -90,7 +92,7 @@ def _searched(setup, goal, judge, rng):
         scores = (outcomes[:, setup.byte_indices] == goal[setup.byte_indices]).sum(1)
     # Random among ties: with a coarse distance most buttons tie, and always taking the first (no button)
     # would mean standing still.
-    return int(rng.choice(np.flatnonzero(scores == scores.max())))
+    return int(rng.choice(np.flatnonzero(scores == scores.max()))), scores
 
 
 def _sampled(scores, rng):
@@ -115,6 +117,8 @@ def _run_chunk(task):
     first = [distance(hand_made_place(emulator.memory(s), settings), g) for s, g in zip(states, goal_places)]
     closest = list(first)
     pressed = [bytearray() for _ in chunk]
+    chosen = [bytearray() for _ in chunk]
+    search_scores = [[] for _ in chunk]
     reached = [False] * len(chunk)
     learned = any(trip.player.startswith("learned") for trip in chunk)
     for step in range(max(trip.budget for trip in chunk)):
@@ -130,11 +134,13 @@ def _run_chunk(task):
                 action = int(scores[i].argmax())
             elif trip.player.startswith("search"):
                 judge = {"search": "bytes", "search-learned": "learned", "search-true-distance": "true"}[trip.player]
-                action = _searched(setup, trip.goal, judge, rng)
+                action, button_scores = _searched(setup, trip.goal, judge, rng)
+                search_scores[i].append(button_scores)
             elif trip.player == "random":
                 action = int(rng.integers(len(ACTIONS)))
             else:
                 action = next(replays[i], 0)
+            chosen[i].append(action)
             if rng.random() < STICKY:
                 action = pressed[i][-1] if pressed[i] else 0
             emulator.run(ACTIONS[action], FRAMES_PER_STEP)
@@ -143,7 +149,8 @@ def _run_chunk(task):
             place = hand_made_place(emulator.memory(states[i]), settings)
             closest[i] = min(closest[i], distance(place, goal_places[i]))
             reached[i] = place == goal_places[i]
-    return [Outcome(r, f, 0.0 if r else c, bytes(p)) for r, f, c, p in zip(reached, first, closest, pressed)]
+    return [Outcome(r, f, 0.0 if r else c, bytes(p), bytes(h), np.array(s, np.float32) if s else None)
+            for r, f, c, p, h, s in zip(reached, first, closest, pressed, chosen, search_scores)]
 
 
 def run(trips, model=None, byte_indices=None, search_hold=2):

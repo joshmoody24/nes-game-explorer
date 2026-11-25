@@ -58,7 +58,35 @@ def mean_loss(params, experience, key, shuffle_goals=False, batches=5, size=2048
     return float(np.mean([_sampled_loss(params, k, data, size, shuffle_goals) for k in jax.random.split(key, batches)]))
 
 
+def value_loss(params, observations, goals, targets):
+    """Regression onto a teacher's score for every button."""
+    return jnp.mean(jnp.square(logits(params, observations, goals, TRAINING_DTYPE) - targets))
+
+
+def sample_aimed(key, data, size):
+    """(observation, the goal its recording aimed for, the teacher's target there) from aimed recordings."""
+    observations, labels, observation_offsets, label_offsets, goals = data
+    steps = jax.random.randint(key, (size,), 0, len(labels))
+    recording = jnp.searchsorted(label_offsets, steps, side="right") - 1
+    return observations[observation_offsets[recording] + steps - label_offsets[recording]], goals[recording], labels[steps]
+
+
+def train_aimed(experience, targets, goals, key, updates=5000, batch=512, loss=loss, log=print):
+    """
+    Imitates a teacher: experience replays the teacher's trips (buttons as pressed, sticky noise included);
+    targets holds, for each step, the button the teacher picked (with loss) or its score for every button
+    (with value_loss); goals [recordings, memory bytes] is what each trip aimed for.
+    """
+    init_key, key = jax.random.split(key)
+    params = init_mlp(init_key, (3 * len(experience.byte_indices), *HIDDEN, len(ACTIONS)))
+    observations, _, observation_offsets, action_offsets = device_data(experience)
+    data = (observations, jnp.asarray(targets), observation_offsets, action_offsets,
+            jnp.asarray(goals[:, experience.byte_indices]))
+    return GoalPolicy(fit(loss, params, data, key, updates, batch, sampler=sample_aimed, log=log),
+                      experience.byte_indices)
+
+
 def train(experience, key, updates=5000, batch=512, log=print):
     init_key, key = jax.random.split(key)
     params = init_mlp(init_key, (3 * len(experience.byte_indices), *HIDDEN, len(ACTIONS)))
-    return GoalPolicy(fit(loss, params, experience, key, updates, batch, log=log), experience.byte_indices)
+    return GoalPolicy(fit(loss, params, device_data(experience), key, updates, batch, log=log), experience.byte_indices)

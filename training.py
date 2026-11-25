@@ -75,13 +75,13 @@ def _train_chunk(loss, params, optimizer_state, key, data, updates, batch, sampl
     return params, optimizer_state, values
 
 
-def fit(loss, params, experience, key, updates, batch, sampler=sample_on_device, chunk=1000, log=print):
+def fit(loss, params, data, key, updates, batch, sampler=sample_on_device, chunk=1000, log=print):
     """
-    Minimizes loss(params, observations, goals, actions) on batches drawn by sampler(key, data, batch), on
-    the default device (the GPU when there is one). loss and sampler must be module-level functions.
+    Minimizes loss(params, observations, goals, labels) on batches drawn by sampler(key, data, batch), on
+    the default device (the GPU when there is one), from data already there (e.g. device_data(experience)).
+    loss and sampler must be module-level functions.
     """
     optimizer_state = OPTIMIZER.init(params)
-    data = device_data(experience)
     for done in range(0, updates, chunk):
         key, chunk_key = jax.random.split(key)
         params, optimizer_state, values = _train_chunk(loss, params, optimizer_state, chunk_key, data,

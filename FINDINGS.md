@@ -356,3 +356,35 @@ trained with hindsight goals:
 A small gain from far less data (5K short trips vs 20K recordings), but the labels are still blurred:
 the recorded buttons include the 25% sticky-noise repeats, and hindsight goals ignore the goal the
 teacher was actually aiming for. Next: record the teacher's own choices and train on its real goal.
+
+## 2026-11-25: what students should learn from the search teacher (`python distill.py policy-data`)
+
+Teacher (learned distance + 4-step lookahead): 73% of the 600 held-out trips. Students, no lookahead:
+
+| student | 5K teacher trips | 10K teacher trips |
+|---|---|---|
+| hindsight goals, buttons as pressed | 64% | **68%** |
+| teacher's real goals, teacher's chosen button | 56% | - |
+| teacher's real goals, regress all 25 button scores | - | 59% |
+| same, scores minus the step's average | - | 57% |
+
+(random-play-trained player: 60-62%.) Real-goal students memorize: 33% of the teacher's buttons right on
+trained-on lessons vs 14% held out, and held-out loss worsens with training (2.84 -> 3.02). Real goals give
+one goal per trip; hindsight gives many per trip. Teacher choices are also spread (no button over 9%).
+More teacher trips help hindsight students: 64% -> 68% for 5K -> 10K.
+
+## 2026-11-25: what students should learn from the search teacher (`python distill.py policy-data`)
+
+Teacher (learned distance + 4-step lookahead): 73% of the 600 held-out trips. Students, no lookahead:
+
+| student | 5K teacher trips | 10K teacher trips |
+|---|---|---|
+| hindsight goals, buttons as pressed | 64% | **68%** |
+| teacher's real goals, teacher's chosen button | 56% | - |
+| teacher's real goals, regress all 25 button scores | - | 59% |
+| same, scores minus the step's average | - | 57% |
+
+(random-play-trained player: 60-62%.) Real-goal students memorize: 33% of the teacher's buttons right on
+trained-on lessons vs 14% held out, and held-out loss worsens with training (2.84 -> 3.02). Real goals give
+one goal per trip; hindsight gives many per trip. Teacher choices are also spread (no button over 9%).
+More teacher trips help hindsight students: 64% -> 68% for 5K -> 10K.

@@ -11,7 +11,7 @@ import numpy as np
 import optax
 
 from policy import features
-from training import TRAINING_DTYPE, CpuModel, fit, init_mlp, mlp
+from training import TRAINING_DTYPE, CpuModel, device_data, fit, init_mlp, mlp
 
 HIDDEN = (512, 256)
 MAX_GAP = 64
@@ -62,5 +62,5 @@ class Distance(CpuModel):
 def train(experience, key, updates=20000, batch=1024, log=print):
     init_key, key = jax.random.split(key)
     params = init_mlp(init_key, (3 * len(experience.byte_indices), *HIDDEN, len(EDGES) + 1))
-    return Distance(fit(loss, params, experience, key, updates, batch, sampler=sample_pairs, log=log),
+    return Distance(fit(loss, params, device_data(experience), key, updates, batch, sampler=sample_pairs, log=log),
                     experience.byte_indices)
