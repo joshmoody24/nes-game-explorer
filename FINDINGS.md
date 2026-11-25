@@ -344,3 +344,15 @@ Causes, each measured before fixing:
   workers initialized the GPU. Now set in the environment workers inherit.
 - Compiling training code: JAX's disk cache (flake env) saves ~4 s per model on later runs.
 Unchanged behavior: random and replay players give exactly the same 42% / 92% on the 600 held-out trips.
+
+## 2026-11-25: first distillation of search (`python distill.py policy-data --distance-train 20000 --distance-updates 20000 --trips 5000 --policy-train 20000 --policy-updates 10000`, 4m20s)
+
+Search teacher with the learned distance: 73% of the 600 held-out trips. Players with no lookahead,
+trained with hindsight goals:
+- random play only (20K recordings): 60%
+- random play + 5K teacher trips: 59%
+- 5K teacher trips only: **64%**
+
+A small gain from far less data (5K short trips vs 20K recordings), but the labels are still blurred:
+the recorded buttons include the 25% sticky-noise repeats, and hindsight goals ignore the goal the
+teacher was actually aiming for. Next: record the teacher's own choices and train on its real goal.
