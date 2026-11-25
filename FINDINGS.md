@@ -444,3 +444,22 @@ Independent review (second agent) points: the learned parts only follow routes t
   learned-greedy`): **92%** to Morph Ball from the start, vs 70% for the practiced student and **35% for
   blind replay** of the same buttons under the same sticky noise. Closed-loop nearest-neighbour lookup on raw
   RAM beats the trained network by a wide margin (cf. episodic control).
+
+## 2026-11-25 (night): archive keeps paths; complexity review and pruning
+
+- **Paths in the archive** (Go-Explore's original design): every place keeps the shortest replayable button
+  path from the start state; workers rank candidates by path length. 1-minute run: 200/200 sampled paths
+  replay to their place (`python -m checks.path_check <run>`), median 522 steps; speed unchanged (~490K
+  frames/s). This replaces stitching routes from archive parent chains, which got stuck after 14-18 of 110
+  waypoints toward missiles (random or learned attempts) on odd waypoints (door transitions, near-death
+  lineages).
+- **Random attempts can stitch** the Morph Ball route (367 steps) but cannot shorten it; the learned student
+  stitched 132 and shortened to 67. Learning helps route *finding*, not route *following*.
+- **Complexity review** (Hickey / Ousterhout / Grug): `trips.py` braids the trip runner, a 7-way player
+  string switch and Metroid-only success tests; exploration has its own actor/pipe workers beside
+  `workers.py`; "route / path / chain / waypoints" name one idea (start state + buttons); `chase.py` grew 6
+  modes. Removed now: keep rules (empowerment, rare-empowerment, safety, more-missiles, more-health) and
+  scores, selection modes (productive, powerful), `empowerment.py`, `vitals.py`, `promise.py`, `critic.py`,
+  `improve.py` and their checks (all logged failures; in git history). Deferred until the path-follower
+  results settle what survives: players as values with one interface, injected success test, one worker
+  system, one path concept.

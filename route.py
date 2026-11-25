@@ -15,20 +15,28 @@ class Follower:
     """
     Plays a route without learning: finds the route state most like the current one (most chosen bytes
     equal) and presses the button the route pressed there. Same interface as the trained players
-    (model(memories, goal_memories) -> [rows, buttons] scores; goals are ignored).
+    (model(memories, goal_memories) -> [rows, buttons] scores). When a goal is a state on the route, only the
+    window route states before it are searched: routes revisit similar spots, and a match from another
+    part of the route presses the wrong button here.
     """
 
-    def __init__(self, params, byte_indices):
+    def __init__(self, params, byte_indices, window=30):
         self.observations, self.actions = params
         self.byte_indices = byte_indices
+        self.window = window
 
     def host_params(self):
         return self.observations, self.actions
 
+    def _nearest(self, observation, goal):
+        on_route = np.flatnonzero((self.observations == goal).all(1))
+        end = on_route[0] + 1 if len(on_route) else len(self.observations)
+        begin = max(0, end - self.window) if len(on_route) else 0
+        return begin + int((self.observations[begin:end] == observation).sum(1).argmax())
+
     def __call__(self, memories, goal_memories):
-        similarity = (memories[:, None, self.byte_indices] == self.observations[None]).sum(-1)
-        nearest = np.minimum(similarity.argmax(1), len(self.actions) - 1)
-        return np.eye(len(ACTIONS))[self.actions[nearest]]
+        nearest = [self._nearest(m[self.byte_indices], g[self.byte_indices]) for m, g in zip(memories, goal_memories)]
+        return np.eye(len(ACTIONS))[self.actions[np.minimum(nearest, len(self.actions) - 1)]]
 
 
 def replay(emulator, start, actions):

@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from emulator import Emulator
-from explorers import ROM, Explorers, Settings, hand_made_place, rank, score
+from explorers import ROM, Explorers, Settings, hand_made_place
 from metroid import start_game
 from progress import Progress
 
@@ -34,58 +34,41 @@ CHECKPOINT_EVERY_SECONDS = 300
 
 @dataclass
 class Archive:
-    selection: str
     places: list = field(default_factory=list)
     states: list = field(default_factory=list)
-    scores: list = field(default_factory=list)  # see explorers.score; the kept state has the best seen
     times_chosen: list = field(default_factory=list)
-    discoveries: list = field(default_factory=list)  # new places found by segments started here
     parents: list = field(default_factory=list)  # archive index of the place whose segment found this one (-1: start)
-    # Buttons (indices into ACTIONS) from the start state to the kept state: every place has a replayable
-    # route. None for places resumed from an older run, which didn't keep paths.
+    # Buttons (indices into ACTIONS) from the start state to the kept state, the shortest found: every place
+    # has a replayable route. None for places resumed from an older run, which didn't keep paths.
     paths: list = field(default_factory=list)
     index: dict = field(default_factory=dict)  # place -> position in the lists above
-    updates: list = field(default_factory=list)  # append-only (place, rank) log that workers sync from
+    updates: list = field(default_factory=list)  # append-only (place, path length) log that workers sync from
 
     def path_length(self, i):
         return UNKNOWN_PATH_LENGTH if self.paths[i] is None else len(self.paths[i])
 
-    def offer(self, place, state, score, parent=-1, path=None):
-        """
-        Keeps state if place is new or it ranks above the kept state (higher score, or equal score and a
-        shorter path). Returns "new", "improved" (higher score), "shorter" or None.
-        """
+    def offer(self, place, state, parent=-1, path=None):
+        """Keeps state if place is new or path is shorter than the kept one's. Returns "new", "shorter" or None."""
         length = UNKNOWN_PATH_LENGTH if path is None else len(path)
         if place in self.index:
             i = self.index[place]
-            if rank(score, length) > rank(self.scores[i], self.path_length(i)):
-                outcome = "improved" if score > self.scores[i] else "shorter"
-                self.states[i], self.scores[i], self.paths[i] = state, score, path
-                self.updates.append((place, rank(score, length)))
-                return outcome
-            return None
+            if length >= self.path_length(i):
+                return None
+            self.states[i], self.paths[i] = state, path
+            self.updates.append((place, length))
+            return "shorter"
         self.index[place] = len(self.places)
         self.places.append(place)
         self.states.append(state)
-        self.scores.append(score)
         self.times_chosen.append(0)
-        self.discoveries.append(0)
         self.parents.append(parent)
         self.paths.append(path)
-        self.updates.append((place, rank(score, length)))
+        self.updates.append((place, length))
         return "new"
 
     def choose(self, rng):
-        chosen = np.array(self.times_chosen)
-        weights = 1 / np.sqrt(1 + chosen)
-        if self.selection in ("productive", "powerful"):
-            weights *= 1 + np.array(self.discoveries) / (1 + chosen)
-        if self.selection == "powerful":
-            # Explore more from stronger states (safer, better armed), so new places are first reached
-            # by healthy lineages. Scores are rescaled to 0-1 so any keep rule's scale works.
-            scores = np.array(self.scores, dtype=float)
-            spread = scores.max() - scores.min()
-            weights *= 0.2 + ((scores - scores.min()) / spread if spread > 0 else 0)
+        """A rarely chosen place, favoring the least chosen."""
+        weights = 1 / np.sqrt(1 + np.array(self.times_chosen))
         index = int(rng.choice(len(self.places), p=weights / weights.sum()))
         self.times_chosen[index] += 1
         return index
@@ -106,10 +89,9 @@ def directory_gigabytes(path):
 def resumed_archive(run_name, settings, emulator):
     """An earlier run's saved states, re-sorted into places under the current settings."""
     saved = pickle.loads(zlib.decompress((RUNS / run_name / "checkpoint.pkl.z").read_bytes()))
-    archive = Archive(settings.selection)
+    archive = Archive()
     for state in saved["states"]:
-        memory = emulator.view(state)
-        archive.offer(hand_made_place(memory, settings), state, score(memory, settings))
+        archive.offer(hand_made_place(emulator.view(state), settings), state)
     return archive
 
 
@@ -194,12 +176,10 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = start_game(emulator)
     if args.resume:
-        assert settings.keep in ("shortest", "more-missiles"), "resuming would mean replay-scoring every saved state"
         archive = resumed_archive(args.resume, settings, emulator)
     else:
-        archive = Archive(settings.selection)
-        memory = emulator.view(start)
-        archive.offer(hand_made_place(memory, settings), start, score(memory, settings), path=b"")
+        archive = Archive()
+        archive.offer(hand_made_place(emulator.view(start), settings), start, path=b"")
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0
@@ -230,12 +210,10 @@ def main():
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
                 start_path = start_paths[worker_index]
-                outcomes = [archive.offer(place, state, state_score, segment.start,
+                outcomes = [archive.offer(place, state, segment.start,
                                           None if start_path is None else start_path + segment.actions[:length - len(start_path)])
-                            for place, (state, state_score, length) in segment.found.items()]
+                            for place, (state, length) in segment.found.items()]
                 new_places = outcomes.count("new")
-                # A stronger state for a known place (healed, rearmed) counts as progress, like a new place.
-                archive.discoveries[segment.start] += new_places + outcomes.count("improved")
                 if rng.random() < args.record:
                     recordings.add(segment)
                 segment_log["start"].append(segment.start)

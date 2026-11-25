@@ -27,9 +27,10 @@ from distill import cached
 from emulator import Emulator
 from experience import build
 from explorers import ROM, Settings, hand_made_place
-from metroid import ITEMS, MAX_MISSILES, at
+from metroid import ITEMS, MAX_MISSILES, area_of, at
 
-TARGETS = {"morph": lambda memory: memory[at(ITEMS)] & 0x10, "missiles": lambda memory: memory[at(MAX_MISSILES)] > 0}
+TARGETS = {"morph": lambda memory: memory[at(ITEMS)] & 0x10, "missiles": lambda memory: memory[at(MAX_MISSILES)] > 0,
+           "norfair": lambda memory: area_of(memory) == 1}
 
 
 def route(emulator, run, target):
@@ -45,6 +46,13 @@ def route(emulator, run, target):
 
     hits = [i for i, state in enumerate(states) if TARGETS[target](emulator.memory(state))]
     return [states[i] for i in min((chain(i) for i in hits), key=len)]
+
+
+def archive_path(emulator, run, target):
+    """(start state, buttons) of the shortest stored path to a place with the target."""
+    saved = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))
+    hits = [i for i, state in enumerate(saved["states"]) if TARGETS[target](emulator.memory(state))]
+    return saved["states"][0], min((saved["paths"][i] for i in hits), key=len)
 
 
 def student(emulator, teacher_file):
@@ -69,13 +77,16 @@ def main():
     parser.add_argument("--player", help="a saved player (parameters, byte indices) instead of the distilled student")
     parser.add_argument("--follower", action="store_true", help="play the route with route.Follower (no learning)")
     parser.add_argument("--route", help="a stitched route (see route.py) to take waypoints from, instead of the archive")
+    parser.add_argument("--archive-path", action="store_true",
+                        help="take waypoints from the archive's stored shortest path to the target")
     parser.add_argument("--spacing", type=int, default=10, help="steps between waypoints on a stitched route")
     args = parser.parse_args()
 
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    if args.route:
+    if args.route or args.archive_path:
         import route as routes
-        start, actions = pickle.loads(Path(args.route).read_bytes())
+        start, actions = (pickle.loads(Path(args.route).read_bytes()) if args.route
+                          else archive_path(emulator, args.run, args.target))
         path = routes.replay(emulator, start, actions)
         states = path[::args.spacing] + ([path[-1]] if (len(path) - 1) % args.spacing else [])
     else:
@@ -90,19 +101,21 @@ def main():
     if args.follower:
         import route as routes
         follower_actions = np.frombuffer(actions, np.uint8)
-        player = routes.Follower((np.stack([emulator.memory(s)[byte_indices] for s in path[:-1]]), follower_actions),
+        player = routes.Follower((np.stack([emulator.memory(s)[byte_indices] for s in path]),
+                                  np.append(follower_actions, 0)),
                                  byte_indices)
     videos = Path("videos")
     videos.mkdir(exist_ok=True)
     if args.per_hop:
         for kind in args.players.split(","):
             model = judge if kind == "search-learned" else player
-            hops = []
-            for hop, (here, there) in enumerate(zip(states[:-1], waypoints)):
-                attempts = [trips.Trip(here, there, args.budget, kind, seed=seed) for seed in range(args.attempts)]
-                outcomes = trips.run(attempts, model, byte_indices=byte_indices, search_hold=4)
-                hops.append(f"{np.mean([o.reached for o in outcomes]):.0%}")
-            print(f"{kind:>20}: success per hop {' '.join(hops)}", flush=True)
+            attempts = [trips.Trip(here, there, args.budget, kind, seed=seed)
+                        for here, there in zip(states[:-1], waypoints) for seed in range(args.attempts)]
+            reached = np.array([o.reached for o in trips.run(attempts, model, byte_indices=byte_indices, search_hold=4)])
+            per_hop = reached.reshape(len(waypoints), args.attempts).mean(1)
+            print(f"{kind:>20}: success per hop " + " ".join(f"{rate:.0%}" for rate in per_hop), flush=True)
+            print(f"{'':>20}  hops under 50%: {list(np.flatnonzero(per_hop < 0.5))}; chance of chaining every "
+                  f"hop {np.prod(per_hop):.2%}", flush=True)
         return
     for kind in args.players.split(","):
         attempts = [trips.Trip(start, waypoints[-1], args.budget, kind, seed=seed, waypoints=tuple(waypoints[:-1]))
@@ -113,7 +126,7 @@ def main():
         print(f"{kind:>20}: reached {args.target} in {np.mean(reached == len(waypoints)):.0%} of {len(outcomes)}; "
               f"waypoints reached median {np.median(reached):.0f}/{len(waypoints)} (best {reached.max()}); "
               f"died in {np.mean([o.died for o in outcomes]):.0%}", flush=True)
-        if kind == "learned":
+        if kind != "random":
             for label, i in [("best", int(reached.argmax())), ("worst", int(reached.argmin()))]:
                 path = videos / f"{args.target}-{kind}-{label}.mp4"
                 video.record(emulator, start, np.frombuffer(outcomes[i].actions, np.uint8), path)
