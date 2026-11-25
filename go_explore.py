@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from emulator import Emulator
-from explorers import ROM, Explorers, Settings, hand_made_place
+from explorers import ROM, Explorers, Settings, hand_made_place, rank
 from metroid import start_game
 from progress import Progress
 
@@ -41,29 +41,30 @@ class Archive:
     # Buttons (indices into ACTIONS) from the start state to the kept state, the shortest found: every place
     # has a replayable route. None for places resumed from an older run, which didn't keep paths.
     paths: list = field(default_factory=list)
+    ranks: list = field(default_factory=list)  # see explorers.rank: what the kept state holds, then path length
     index: dict = field(default_factory=dict)  # place -> position in the lists above
-    updates: list = field(default_factory=list)  # append-only (place, path length) log that workers sync from
+    updates: list = field(default_factory=list)  # append-only (place, rank) log that workers sync from
 
     def path_length(self, i):
         return UNKNOWN_PATH_LENGTH if self.paths[i] is None else len(self.paths[i])
 
-    def offer(self, place, state, parent=-1, path=None):
-        """Keeps state if place is new or path is shorter than the kept one's. Returns "new", "shorter" or None."""
-        length = UNKNOWN_PATH_LENGTH if path is None else len(path)
+    def offer(self, place, state, state_rank, parent=-1, path=None):
+        """Keeps state if place is new or it ranks above the kept state. Returns "new", "better" or None."""
         if place in self.index:
             i = self.index[place]
-            if length >= self.path_length(i):
+            if state_rank <= self.ranks[i]:
                 return None
-            self.states[i], self.paths[i] = state, path
-            self.updates.append((place, length))
-            return "shorter"
+            self.states[i], self.paths[i], self.ranks[i] = state, path, state_rank
+            self.updates.append((place, state_rank))
+            return "better"
         self.index[place] = len(self.places)
         self.places.append(place)
         self.states.append(state)
         self.times_chosen.append(0)
         self.parents.append(parent)
         self.paths.append(path)
-        self.updates.append((place, length))
+        self.ranks.append(state_rank)
+        self.updates.append((place, state_rank))
         return "new"
 
     def choose(self, rng):
@@ -91,7 +92,8 @@ def resumed_archive(run_name, settings, emulator):
     saved = pickle.loads(zlib.decompress((RUNS / run_name / "checkpoint.pkl.z").read_bytes()))
     archive = Archive()
     for state in saved["states"]:
-        archive.offer(hand_made_place(emulator.view(state), settings), state)
+        memory = emulator.view(state)
+        archive.offer(hand_made_place(memory, settings), state, rank(memory, UNKNOWN_PATH_LENGTH, settings))
     return archive
 
 
@@ -181,7 +183,8 @@ def main():
         archive = resumed_archive(args.resume, settings, emulator)
     else:
         archive = Archive()
-        archive.offer(hand_made_place(emulator.view(start), settings), start, path=b"")
+        memory = emulator.view(start)
+        archive.offer(hand_made_place(memory, settings), start, rank(memory, 0, settings), path=b"")
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0
@@ -212,9 +215,9 @@ def main():
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
                 start_path = start_paths[worker_index]
-                outcomes = [archive.offer(place, state, segment.start,
+                outcomes = [archive.offer(place, state, state_rank, segment.start,
                                           None if start_path is None else start_path + segment.actions[:length - len(start_path)])
-                            for place, (state, length) in segment.found.items()]
+                            for place, (state, length, state_rank) in segment.found.items()]
                 new_places = outcomes.count("new")
                 if rng.random() < args.record:
                     recordings.add(segment)

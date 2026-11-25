@@ -542,3 +542,17 @@ Fresh exploration from a state just after the first missile pickup (room 11,18; 
 - Conclusion for the night: every random-exploration variant (resource places, frugal, fresh layers, map
   travel) delivers the Long Beam door empty-handed. Carrying a resource across known territory to where it
   is needed requires deliberate behavior; random play with save states does not provide it.
+
+## 2026-11-25 (morning): hoarding carries missiles to the door
+
+Josh's framing: hoard anything spendable, without proof it's useful (cf. RPG potions, a mathematician's
+lemmas). Implemented as an archive keep rule, not behavior: `--keep-more <memory index>` ranks a place's
+candidate states by the value of that byte (more is better), then path length. Exploration still presses
+random buttons (spends freely); the archive just remembers the richest visit to each place. Diagnostic:
+the missile byte is named by hand (index 4217); the generic version would use automatically detected
+spendables.
+- Layer from the first missiles, plain places, hoarding missiles (`runs/layer-keep-15min`): 94 rooms;
+  **4,001 of 4,468 places hold 5 missiles; the door room has 32 states holding 5** (0 in every earlier
+  variant). No entry beyond the door in 15 min.
+- Opening depends on height (`python -m checks.red_door_check resources-15min 300`, per state): all 11
+  successes came from 3 states high in the room (room y 52-87), ~1-2% each; 17 lower states: 0/300.

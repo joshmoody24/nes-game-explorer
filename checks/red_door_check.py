@@ -19,7 +19,7 @@ import workers
 from controls import ACTIONS, FRAMES_PER_STEP
 from emulator import Emulator
 from explorers import ROM
-from metroid import CURRENT_MISSILES, MAP_X, MAP_Y, MAX_MISSILES, ROOM_X, area_of, at
+from metroid import CURRENT_MISSILES, MAP_X, MAP_Y, MAX_MISSILES, ROOM_X, ROOM_Y, area_of, at
 
 DOOR_ROOM, BEYOND = (0, 5, 8), (0, 5, 7)
 
@@ -59,7 +59,10 @@ def main():
         armed.append(bytes(edited))
     for label, states in [("as found (0 missiles)", near), ("with 5 missiles edited in", armed)]:
         tasks = [(s, [k * 1000 + j for j in range(per_state)]) for k, s in enumerate(states)]
-        reached = [r for result in workers.map(_opened, tasks) for r in result]
+        results = list(workers.map(_opened, tasks))
+        reached = [r for result in results for r in result]
+        where = [(int(emulator.memory(s)[ROOM_X]), int(emulator.memory(s)[ROOM_Y])) for s in states]
+        print(f"  successes per state (room x, y): {[(w, n) for w, n in zip(where, [sum(r) for r in results])]}")
         print(f"{label}: {len(states)} states x {per_state} segments: entered the room beyond the red door in "
               f"{np.mean(reached):.2%} ({sum(reached)})", flush=True)
 

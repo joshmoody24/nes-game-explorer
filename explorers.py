@@ -39,6 +39,10 @@ class Settings:
     # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
     # in random play. Below 1, random play wastes missiles less often.
     select_weight: float = 1.0
+    # A memory index (memory() numbering) whose higher value makes a place's state better, before path length:
+    # keep the state that holds more of something random play only spends (one-way reachability: a state
+    # holding more can become one holding less, not back). None ranks by path length alone.
+    keep_more: int | None = None
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
@@ -65,8 +69,8 @@ def energy_band(energy):
 
 @dataclass
 class Segment:
-    """What one stretch of random buttons found: {place: (state, path length from the start)} for places
-    that were new, or reached by a shorter path than the kept state's when the segment started."""
+    """What one stretch of random buttons found: {place: (state, path length from the start, rank)} for places
+    that were new, or reached with a better rank (see rank) than the kept state's when the segment started."""
     start: int  # archive index it started from
     found: dict
     progress: Progress
@@ -76,8 +80,16 @@ class Segment:
     start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
 
 
+WORST_RANK = (-np.inf, -np.inf)
+
+
+def rank(memory, path_length, settings):
+    """How a place's candidate states compare (higher is kept): what they hold (see keep_more), then shorter paths."""
+    return (int(memory[settings.keep_more]) if settings.keep_more is not None else 0, -path_length)
+
+
 def explore(emulator, rng, settings, known, start, start_state, start_path_length):
-    """known: {place: path length of the kept state}."""
+    """known: {place: rank of the kept state}."""
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
     weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
@@ -98,8 +110,9 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         place = hand_made_place(memory, settings)
         new = place not in known and place not in found
         length = start_path_length + step + 1
-        if length < min(known.get(place, np.inf), found[place][1] if place in found else np.inf):
-            found[place] = (state, length)
+        candidate = rank(memory, length, settings)
+        if candidate > max(known.get(place, WORST_RANK), found[place][2] if place in found else WORST_RANK):
+            found[place] = (state, length, candidate)
         if new:
             gaps.append(stale + 1)
             stale = 0
