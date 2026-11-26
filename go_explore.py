@@ -362,9 +362,9 @@ def main():
                           guide_weight=settings.guide_weight if settings.guide else 0.0, recency_weight=settings.recency,
                           selection=settings.selection, rng=np.random.default_rng(args.seed),
                           chooser=pickle.loads(Path(settings.chooser_file).read_bytes()) if settings.chooser_file else None)
-        archive.familiar = familiar_counts(args.familiar)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
+    archive.familiar = familiar_counts(args.familiar)
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0
