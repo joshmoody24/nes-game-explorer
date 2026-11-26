@@ -62,6 +62,8 @@ class Archive:
     chooser: tuple = None  # (weights, bias, means, scales) of the learned chooser, once fit
     cached_weights: tuple = None  # (archive size, choice probabilities, uses) reused by choose
     recency_weight: float = 0.0  # see explorers.Settings.recency
+    selection: str = "classic"  # see explorers.Settings.selection
+    rng: object = None  # draws Thompson samples (set by main)
     progress: list = field(default_factory=list)  # how far along the guide route each visit is (0-1)
     # The locations each visit's lineage passed through, snapshotted when the visit was kept (parent links
     # can loop after slot reuse; these can't). Kept only when exploring with a refill (to pay back cheats).
@@ -135,12 +137,30 @@ class Archive:
         self.times_chosen[index] += 1
         return index
 
+    def sampled_rates(self, chosen):
+        """One Thompson sample per visit of its chance that a try finds something new: Beta(1 + successes, prior
+        failures + failures), where the prior has the strength of one success and the mean of the archive's rate
+        ("thompson") or of the visit's room's rate, itself starting from the archive's ("thompson-room")."""
+        found = np.array(self.productive, float)
+        failed = np.maximum(chosen - found, 0)
+        rate = (found.sum() + 1) / (chosen.sum() + 2)
+        prior_failures = np.full(len(found), 1 / rate - 1)
+        if self.selection == "thompson-room":
+            rooms = {}
+            room_of = np.array([rooms.setdefault(tuple(p[1][:3]) if p[0] == "record" else tuple(p[:3]), len(rooms))
+                                for p in self.places])
+            room_found, room_tries = np.bincount(room_of, found), np.bincount(room_of, chosen)
+            room_rate = (room_found + 1) / (room_tries + 1 / rate)
+            prior_failures = 1 / room_rate[room_of] - 1
+        return self.rng.beta(1 + found, prior_failures + failed)
+
     def weights(self):
         active = np.array(self.active)
         place_of = np.array([self.place_numbers[choice_group(p)] for p in self.places]) if len(self.place_numbers) else None
         visits_per_place = np.bincount(place_of, weights=active)
         chosen = np.array(self.times_chosen)
-        weights = active / np.sqrt(1 + chosen) / np.maximum(visits_per_place[place_of], 1)
+        weights = (self.sampled_rates(chosen) if self.selection != "classic" else 1 / np.sqrt(1 + chosen)) * active
+        weights = weights / np.maximum(visits_per_place[place_of], 1)
         # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
         weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
         if self.chooser_weight and self.chooser is not None:
@@ -324,6 +344,7 @@ def main():
                           danger_weight=settings.avoid_danger if settings.danger_model else 0.0,
                           mastery_weight=settings.mastery, chooser_weight=settings.learned_chooser,
                           guide_weight=settings.guide_weight if settings.guide else 0.0, recency_weight=settings.recency,
+                          selection=settings.selection, rng=np.random.default_rng(args.seed),
                           chooser=pickle.loads(Path(settings.chooser_file).read_bytes()) if settings.chooser_file else None)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")

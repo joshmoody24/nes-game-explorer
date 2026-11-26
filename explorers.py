@@ -93,6 +93,10 @@ class Settings:
     # Favor newer visits when choosing where to explore: weight x (1 + recency x (age rank)^4), age rank 0 for the
     # oldest visit and 1 for the newest, so effort follows the frontier instead of spreading over everything found.
     recency: float = 0.0
+    # How choose() weighs visits: "classic" 1/sqrt(1 + times chosen); "thompson" samples each visit's chance that a
+    # try finds something new from its own record, starting from the archive's overall rate; "thompson-room" starts
+    # it from its room's rate instead (which itself starts from the archive's), so mined-out rooms fade.
+    selection: str = "classic"
     # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
     # you were heading is usually the way on), instead of a random one.
     momentum: float = 0.0
