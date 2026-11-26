@@ -826,3 +826,14 @@ the state-level danger prediction to choose which states to keep and explore fro
   -0.06, holdings/danger/surprise ~0. The learner rediscovered Go-Explore's least-chosen rule; power doesn't
   predict *immediate* discovery because resources pay off far away. Next: train the chooser on downstream
   outcomes (did the lineage later get an acquisition / open new territory).
+- **Downstream chooser** (`python -m checks.downstream_check downstream/s0 downstream/s1 --top 0.02`; two
+  8-min, 9-worker runs from the first missiles with missile hoarding; 622K decisions, each logged with the
+  visits it created; bug fixed on the way: logging a row *view* of the signals table kept every table alive,
+  OOM at 16 GB): same logistic chooser, two labels.
+  | label | rate | held-out AUC | rarely chosen | holdings | death rate | path length |
+  |---|---|---|---|---|---|---|
+  | found something new now | 0.60% | 0.957 | +0.81 | +0.01 | -0.11 | +0.15 |
+  | created a top-2% lineage later | 0.17% | 0.751 | +0.18 | **+0.11** | -0.08 | +0.01 |
+  Trained on long-range outcomes, the learner discovers that holding resources matters (11x the weight),
+  without being told; trained on immediate outcomes it learns pure curiosity. Short-horizon power measures
+  failed because they asked the immediate question.
