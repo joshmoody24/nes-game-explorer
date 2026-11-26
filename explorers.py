@@ -74,6 +74,9 @@ class Settings:
     # keeps just the shortest path.
     keep_more: str = ""
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
+    # Save-scum on damage: bytes of one number, most significant first (e.g. "263,262"); a try ends, like a
+    # death, the moment that number drops, so nothing reached after taking damage is kept.
+    no_damage: str = ""
     generic_places: str = ""  # "room", "position" or "both": parts of location from bytes found by generic_places.py
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
@@ -159,6 +162,10 @@ def refilled(emulator, state, edits):
     return bytes(edited)
 
 
+def guarded_value(memory, indices):
+    return tuple(int(memory[i]) for i in indices)
+
+
 def explore(emulator, rng, settings, known, start, start_state, start_path_length):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched
@@ -166,6 +173,8 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     if settings.refill:
         start_state = refilled(emulator, start_state, settings.refill)
     emulator.load(start_state)
+    guarded = [int(b) for b in settings.no_damage.split(",") if b]
+    guarded_before = guarded_value(emulator.view(start_state), guarded)
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
     weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
@@ -192,9 +201,11 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     rare = np.flatnonzero(changed & (_change_counts < RARE_CHANGE_RATE * _steps_watched))
                     patterns.update(int(b) * 256 + int(full_memory[b]) for b in rare)
         previous_memory = full_memory
-        if memory[GAME_MODE] == GAME_OVER:
+        if memory[GAME_MODE] == GAME_OVER or (guarded and guarded_value(memory, guarded) < guarded_before):
             died = True
             break
+        if guarded:
+            guarded_before = guarded_value(memory, guarded)
         place = hand_made_place(memory, settings)
         new = place not in known and place not in found
         length = start_path_length + step + 1

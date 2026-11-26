@@ -20,7 +20,7 @@ run_one() {
     --start-state "$start" --keep-more 4217 --stop-at-item bombs $flags > "/tmp/$name-$tag.log" 2>&1 < /dev/null
 }
 export -f run_one; export name variant
-printf '%s\n' "${jobs_list[@]}" | xargs -P 8 -I{} bash -c 'run_one "$@"' _ {}
+printf '%s\n' "${jobs_list[@]}" | xargs -P ${PARALLEL:-8} -I{} bash -c 'run_one "$@"' _ {}
 for d in runs/$name/*/; do
   python3 - "$d" <<'EOF'
 import json, sys

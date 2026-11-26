@@ -915,3 +915,13 @@ the state-level danger prediction to choose which states to keep and explore fro
   chooser 3/3 (106-150 s); Bombs-1000 2/3 (74, 80 s) vs 2/3 (46, 102 s); tank-500 2/3 (12, 20 s) vs 2/3 (6, 14 s);
   tank-1000 0/3 vs 0/3. Total 6/12 vs 7/12: a tie. The chooser isn't the lever. Bombs from 1,000 steps away
   in 1-3 min on 3 workers: this is a usable fast test of hard steps.
+- **Autopsy of the tank wall** (`python -m checks.autopsy_check <failed run> layer2-watch tank 1000`: replays the
+  known route, finds how far along it the failed archive got and what tries from there did). All 12 failed runs
+  (plain, chooser, energy-hoarding) stop at the same spot: route location 31/184, (0,7,17,7,3), the step before
+  room (0,7,18). Not energy: the known route ran at 1 energy throughout, and energy hoarding (`--keep-more
+  4217,263`) farmed up to 31 energy and reached the spot with 11 but still stopped. Video
+  (`videos/known-route-room17.mp4` vs `explorer-tries-room17.mp4`): the route holds right+jump+shoot for ~55
+  steps to cross; random tries (repeat 0.9: mean hold 10 steps, 0.9^55 = 0.3%) fall to the bottom and die.
+- **Long holds** (`--repeat-probability 0.99 --repeat-spread 0.09`: each try's keep probability drawn from
+  0.90-0.99): crossed in 1/3 (to 111/184), with energy hoarding 1/3 (to 119/184); 2/6 vs 0/12 before. Both stall
+  next in room (0,7,21). General gap: skills need holds far longer than the explorer's typical ones.
