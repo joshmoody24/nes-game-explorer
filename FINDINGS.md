@@ -711,3 +711,11 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   those were all low spots in Norfair rooms next to lava: "tried often, nothing beyond" also describes
   **death traps**. Barriers must be where exploration survives yet finds nothing new; needs per-visit death
   counts (not recorded yet).
+- **Death traps vs barriers** (seconds, on saved states; `barriers.find` estimates deaths with probes when
+  an archive lacks counts): filtering out spots where >50% of 20 random 100-step probes die removed the door
+  too: door visits kept in `layer-keep-45min` have median energy 4 and die 40% of the time; with energy
+  edited to 39, 0%. A death filter judges the visitor, not the place. Better: carry first (the carried state
+  arrives with resources), and let real death traps fail as cheap branches.
+- Ranking poor dead ends by tries (wealth = missiles, no death filter): door room **#2 of 60 in the 45-min
+  layer, absent from the top 60 in a 15-min layer**: the barrier signal needs long layers (enough armed
+  tries at the door).
