@@ -1054,3 +1054,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   recency 0 -> 21 Tourian cells, through the Metroids (no enemy-slot hint) to (11,5); recency 100 (`--recency`,
   newest places weighted up) -> 5 Tourian cells, 201 rooms overall: "newest" includes Brinstar's corners. Recency
   off; record places carry most of the focus.
+- **First uncheated run of the method** (`honest1`: from the Bombs save, long holds + record places + missile
+  hoarding; no refills/edits/stay; 22 workers x 60 min): Kraid's area 3 min, Norfair 5, missiles 15 at 6, 2nd tank
+  13, Ridley's area 40; 287 rooms, 284 map cells; **reached Kraid's room by itself** but no boss beaten. Autopsy:
+  the 73 saves in Kraid's room hold energy 0-8 (mostly 3) and 0-4 missiles; Kraid's HP only to 85. The cheats had
+  hidden this: **Samus arrives starving**. Energy isn't hoarded (the detector misses the split decimal bytes).
