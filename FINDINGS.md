@@ -677,3 +677,9 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   **No armed visit ever got high in the door room**, and the door only opens from up high (all 11 earlier
   successes came from room y 52-87). The chain is: arrive armed (favor helps) -> climb high while armed
   (now the failing link) -> 5 hits (~1-2% per try).
+- **Carrying to the door** (`python -m checks.carry_check cache/start-near-door-armed.state "fast3/*"`):
+  map from the 12 short runs (1,801 locations, 12 high spots in the door room); graph.travel from the armed
+  start keeping the arrival with the most missiles (then energy): **kept all 10 missiles over 14 hops**, but
+  stuck in room (8,11) at the same hop both times (409K steps of retries): a hop that needs a precise climb,
+  which neither recorded chunks nor 200 random 60-step tries make from that state. Resources survive travel
+  now; skillful hops don't.
