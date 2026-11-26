@@ -21,10 +21,10 @@ def held(byte, memory):
 
 
 def deliver(emulator, run_dir, byte, count=2):
-    """[(target location, need, delivered state or None)] for the count neediest dead ends."""
+    """[(target location, need, delivered state or None)] for up to count of the neediest dead ends."""
     run_dir = Path(run_dir)
     _, ranked, need = needs(emulator, run_dir, byte)
-    targets = ranked[:count]
+    targets = [t for t in ranked if need[t] > 0][:count]  # no need: more riches open nothing there
     saved = pickle.loads(zlib.decompress((run_dir / "checkpoint.pkl.z").read_bytes()))
     # Paths replay from the run's start file: the archive's first slot may since hold a richer visit.
     start_file = json.loads((run_dir / "config.json").read_text()).get("start_state")
