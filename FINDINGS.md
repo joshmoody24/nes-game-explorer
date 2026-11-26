@@ -1194,3 +1194,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   the lowest-boss-HP healthy save with >= 60 energy) with turbo: 78 -> dead within 3 min (ratchet-3, 1,984 saves
   with Ridley dead). Chain so far: Bombs -> Kraid -> Kraid shaft -> Norfair -> lava corridor -> Ridley lair ->
   Ridley's room -> Ridley, all uncheated; hand steps: choosing each layer's start save.
+- **After Ridley, uncheated: out of his lair, back through Norfair (High Jump picked up on the way), into Brinstar,
+  and the Ice Beam.** Every step was the same move: a 3-minute layer from the healthy save nearest the stalled
+  frontier, with same-progress history. Stalls and their causes: the lair exit door behind a step of grey blocks
+  (25,26); the Norfair column-30 climb; the (10,22) bricks that seal the Norfair elevator room off from the shaft above
+  (the Ice Beam route comes down column 22 from the row-7 corridor, nesmaps map); the column-18 shaft doors on row 7.
+  ice3 (from cache/col18-door.state): Ice Beam within 3 minutes.
