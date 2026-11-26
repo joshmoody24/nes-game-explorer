@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--children", type=int, default=4, help="most child layers per layer")
     parser.add_argument("--layers", type=int, default=12, help="most layers in all")
     parser.add_argument("--layer0", help="reuse this run as layer 0 instead of exploring from power-on")
+    parser.add_argument("--spendables", type=int, default=2, help="hoarding branches per layer")
     args = parser.parse_args()
     root = Path("runs") / args.name
     root.mkdir(parents=True, exist_ok=True)
@@ -60,7 +61,7 @@ def main():
     layer0 = Path("runs") / args.layer0 if args.layer0 else root / "layer0"
     if not args.layer0:
         explore(layer0, args.layer_minutes, None).wait()
-    terms = spendables.detect(emulator, valid_recordings(layer0))
+    terms = spendables.detect(emulator, valid_recordings(layer0), count=args.spendables)
     print(f"layer0 [{time.perf_counter() - started:.0f}s]: {summary(layer0)}; spendables {terms}", flush=True)
     log.write(json.dumps({"layer": "layer0", "parent": None, "spendables": terms, "summary": summary(layer0)}) + "\n")
 

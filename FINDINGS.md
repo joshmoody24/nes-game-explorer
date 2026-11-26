@@ -635,3 +635,18 @@ spendables.
   the 3rd largest (capacity + record, 53%); the two larger ones are map/room-state bits (one-way only within
   the run). Plan: every event seeds a child layer from its best holder; noise events become branches that
   stall.
+
+## 2026-11-25 (evening): the automatic climb
+
+`climb.py`: layer 0 from power-on; spendables detected on its recordings; each layer runs one hoarding
+branch per spendable side by side; each new event (events.py) seeds a child layer.
+- Detector fixes, all checked offline on cached recordings: rank by control judged only where the byte is
+  held (missiles 52%, energy tens 29%, junk 8-10%) instead of decrease/increase ratio; 6000 shuffled control
+  starts (2000 in stored order picked junk; missiles held in only ~2% of states). Missiles now first on
+  3/3 shuffles. Energy tens drops out (changes slightly too often for the "rare" gate).
+- Events: cap share at 90%: from power-on the largest events are start-area bits held by 93-96% of visits;
+  the two missile tanks are the real ones (22%, 29%).
+- `runs/climb3` (reusing climb2/layer0): layers from both missile-tank events, 4 branches x 4 workers x 12
+  min: no Long Beam (missile branch best each time: 86 and 71 rooms). Budget too small: the earlier
+  portfolio's missile branch needed ~16 min at 4 workers; 75% of compute went to junk branches.
+  Next: top 2 spendables, 8 workers each, 15-min layers.
