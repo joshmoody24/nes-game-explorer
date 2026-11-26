@@ -1099,3 +1099,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   30.8K of 56.9K places; `honest3`: 13.3K of 42.5K): `choice_group` now counts a room's record places as one place
   when choosing. 10-min check matched `honest3`'s pace (11 rooms at 10 min both); room count was still climbing at
   30 min (11 -> 27 -> 52).
+- **Out of Kraid's lair** (`honest5`: 60 min from cache/after-kraid-honest.state, record places grouped per room
+  when choosing): 107 rooms, back in Brinstar with Kraid dead, 3rd energy tank, missile capacity 105. Archive 201K
+  places (energy x missile variants per place): next stage starts a new layer from the richest healthy save outside
+  the lair.
