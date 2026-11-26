@@ -1169,3 +1169,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   three cells (frontier diluted by ~100K places), and one-cell progress per try is ~1% or less. A fresh layer from the
   richest healthy save at (21,28) (61 energy, cache/lava-edge-farmed.state): Ridley's lair in 3.2 min (lava-layer2,
   64 rooms). The healthy saves at (21,26) itself had 1 energy (a layer from one died at once).
+- **Uncheated chain enters Ridley's room (first time any run walked in; the cheat chain had used an edited save).**
+  lava-layer2b/c stalled at 95 rooms next to it. Autopsy: (29,17)'s right door and (29,18)'s left door are blue
+  (ROM, Ridley table 0x1618F). Probes by ROOM_X were misleading: x wraps inside multi-screen corridors, so "x = 0"
+  saves were mid-corridor. Absolute x = map col*256 + $FD + (x - $FD) mod 256 found the nearest saves 36 px from the
+  door but under the red-bubble ledge it sits on (nesmaps RidleyHideout.png: image col 0 = map col 14, row 0 = 23).
+  A fresh 3-minute layer from the nearest healthy save (cache/ridley-door.state, 1 full tank): 534 saves in the
+  room, boss present in 10. Same pattern as the lava corridor: a frontier starved inside a big archive, fixed by a
+  fresh layer at the frontier.
