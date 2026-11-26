@@ -1148,3 +1148,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   starts each new place times_chosen at the choices those runs spent at its location (area, cell, block). From the
   shaft top, 3.4 min x 10 workers: familiar left the shaft in 2/3 seeds (13 Brinstar cells outside it each), plain
   0/3; lair share 71-85% vs 89-92%. Splitting places by pose (--place-bytes 768) alone: no escape.
+- **--familiar has the flaw Josh predicted.** After escaping the Kraid shaft, honest7 stalled climbing the column-11
+  shaft toward the row-7 door at (7,11)->(7,12). Probes: climbing is easy (16-23% of 100-step tries gain >=48 px,
+  4-7% gain >=160 px, at any hold length; absolute height = map row*240 + $FC + (y - $FC) mod 240); the furthest saves
+  are ~95 px below the door ledge (the camera, not Samus, was in row 7). But the shaft starts with ~750 familiar tries
+  per location (honest1 came down it), vs ~1,225 in Kraid lair, so the route out is marked nearly as stale as the
+  basin. Per-location productive rates from earlier runs do not separate them either (0.79% shaft vs 0.82% lair),
+  because a new place includes inventory. Counting earlier visits cannot tell a worn-out area from a road that has to
+  be travelled again.
