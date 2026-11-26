@@ -24,7 +24,7 @@ import numpy as np
 from emulator import Emulator
 from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings
 import danger
-from metroid import start_game
+from metroid import permanent_progress, start_game
 from progress import Progress
 
 RUNS = Path("runs")
@@ -337,10 +337,16 @@ def prepare_run_dir(args, settings):
 LOCATION_SIZE = 5  # a hand-made place starts with (area, map y, map x, block x, block y)
 
 
-def familiar_counts(run_names):
-    """Choices earlier runs spent at each location, so this run's novelty is judged against all earlier experience."""
+def familiar_counts(run_names, start, emulator):
+    """Choices earlier runs spent at each location, so this run's novelty is judged against earlier experience.
+    Only runs that began with the same permanent progress count: a new item or a beaten boss can open up places
+    that were worn out before."""
+    progress = permanent_progress(emulator.view(start))
     counts = {}
     for name in filter(None, run_names.split(",")):
+        run_start = Path(json.loads((Path("runs") / name / "config.json").read_text())["start_state"]).read_bytes()
+        if permanent_progress(emulator.view(run_start)) != progress:
+            continue
         saved = pickle.loads(zlib.decompress((Path("runs") / name / "checkpoint.pkl.z").read_bytes()))
         for place, chosen in zip(saved["places"], saved["times_chosen"]):
             if place[0] not in ("record", "climb"):
@@ -364,7 +370,7 @@ def main():
                           chooser=pickle.loads(Path(settings.chooser_file).read_bytes()) if settings.chooser_file else None)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
-    archive.familiar = familiar_counts(args.familiar)
+    archive.familiar = familiar_counts(args.familiar, start, emulator)
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0

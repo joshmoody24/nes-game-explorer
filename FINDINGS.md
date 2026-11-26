@@ -1156,3 +1156,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   basin. Per-location productive rates from earlier runs do not separate them either (0.79% shaft vs 0.82% lair),
   because a new place includes inventory. Counting earlier visits cannot tell a worn-out area from a road that has to
   be travelled again.
+- **Familiar history must share permanent progress (Josh's point).** Column-11 climb from its bottom save
+  (cache/col11-bottom.state), 3.4 min x 8 workers, 2 seeds: history from post-Kraid runs only put 17-21% of saves in
+  Kraid lair and climbed to 1950/2079 (door ledge ~1808); mixed pre- and post-Kraid history 44-47% and 2479/2558; no
+  history 60% and 2874/2789. go_explore now counts a --familiar run only if its start save has the same
+  permanent_progress (items byte, Kraid and Ridley statue bits). Open: a run that slowly climbed a needed shaft
+  (honest7) would mark it stale again; counting visits still cannot tell worn-out from unfinished.
