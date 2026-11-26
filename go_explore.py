@@ -296,7 +296,8 @@ def main():
         archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings,
                           danger_weight=settings.avoid_danger if settings.danger_model else 0.0,
                           mastery_weight=settings.mastery, chooser_weight=settings.learned_chooser,
-                          guide_weight=settings.guide_weight if settings.guide else 0.0)
+                          guide_weight=settings.guide_weight if settings.guide else 0.0,
+                          chooser=pickle.loads(Path(settings.chooser_file).read_bytes()) if settings.chooser_file else None)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()
@@ -371,7 +372,7 @@ def main():
                             archive.progress[slot] = max(archive.progress[slot], route[here])
                 decisions["visit"].append(segment.start)
                 decisions["created"].append(created)
-                if len(decisions["found"]) % CHOOSER_REFIT_EVERY == 0:
+                if len(decisions["found"]) % CHOOSER_REFIT_EVERY == 0 and not settings.chooser_file:
                     if settings.chooser_target == "later":
                         old = len(decisions["found"]) - CHOOSER_LAG
                         if old > CHOOSER_REFIT_EVERY:

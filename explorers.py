@@ -63,6 +63,7 @@ class Settings:
     # What the learned chooser predicts: "now" (the segment found a new place) or "later" (the visits it
     # created grew into a top-2% lineage, judged on decisions old enough to have grown).
     chooser_target: str = "now"
+    chooser_file: str = ""  # a fixed learned chooser (from checks.downstream_check --save), used from the start
     # Pay back a cheat: a file with the ordered locations of a route found with edited-in resources, and how
     # strongly to favor visits further along it: weight x (1 + guide_weight x progress). Empty path: off.
     guide: str = ""

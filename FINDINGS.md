@@ -900,3 +900,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   Second-agent review: hand-made "room" is coarse position, not a room id; races with 2 seeds can't separate
   20-30% (same-setup spread 28-39); judge by milestones over more seeds. **Parked** until the Zelda stage; the
   real Metroid bottleneck is long-range (resources paying off far away).
+- **Pretrained long-range chooser, live** (`--learned-chooser 1 --chooser-file cache/chooser-later.pkl`, fit by
+  `checks.downstream_check ... --save` on 1.36M pooled decisions; fixed, no online refit; 4 seeds x 3 workers x
+  8 min from the first missiles): rooms base 28/28/25/27 (median 27.5), chooser 27/31/25/31 (median 29); places
+  base ~1.4K, chooser 1.3-2.2K. No acquisition in any run (no tank, no missile capacity, no Long Beam). Small
+  edge, inside the noise; this budget is too small to show long-range payoff.
