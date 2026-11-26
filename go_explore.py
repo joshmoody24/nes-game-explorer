@@ -50,6 +50,7 @@ class Archive:
     active: list = field(default_factory=list)  # False once another visit to the same place beats it
     surprises: list = field(default_factory=list)  # new change patterns found by segments started from each visit
     surprise_weight: float = 0.0  # see explorers.Settings.surprise
+    holdings_weight: float = 0.0  # see explorers.Settings.favor_holdings
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
@@ -98,6 +99,9 @@ class Archive:
         weights = active / np.sqrt(1 + chosen) / np.maximum(visits_per_place[place_of], 1)
         # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
         weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
+        if self.holdings_weight and self.holdings and len(self.holdings[0]):
+            held = np.array(self.holdings, dtype=float).sum(1)
+            weights = weights * (1 + self.holdings_weight * held / max(held.max(), 1e-9))
         index = int(rng.choice(len(self.places), p=weights / weights.sum()))
         self.times_chosen[index] += 1
         return index
@@ -211,7 +215,7 @@ def main():
     if args.resume:
         archive = resumed_archive(args.resume, settings, emulator)
     else:
-        archive = Archive(surprise_weight=settings.surprise)
+        archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()

@@ -657,3 +657,17 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   route follower on the stored 18,821-step power-on-to-Bombs path, 50 attempts: median 17 of 1,883
   waypoints (best 23, ~200 steps). The save-scummer's path is reachable but not playable as is: it needs
   shortening and re-planning (phase 2).
+
+## 2026-11-25 (evening): surprise didn't help; "choose like a hoarder" moves the real bottleneck
+
+- **Surprise** (`--surprise`: selection bonus for visits whose segments show a rarely-changing byte taking
+  a never-seen value; whole change patterns were far too noisy: 102K new patterns in 90 s): race from the
+  first missiles, 3 seeds x 6 workers x 15 min: base Long Beam 1/3 (at 619 s), surprise 0/3, 17% slower.
+  Door-room proxy over the 6 runs: 4 reached the door with **0 missiles**; the bottleneck is arriving armed,
+  not hitting the door, and surprise can't help before anything reacts.
+- **Fast harness** (~4 min): start 400 steps before an armed door arrival from a successful run
+  (`cache/start-near-door.state`: room 7,11, 4 missiles, 1 energy), many short runs in parallel, score the
+  most missiles held in the door room.
+- **Choose like a hoarder** (`--favor-holdings W`: selection weight x (1 + W x holdings / max holdings)),
+  6 seeds x 2 workers x 3 min each side: base reached the door 6/6 but kept all 4 missiles in 1/6; favor
+  (W=10) reached it 4/6 and kept all 4 missiles in **3/6**. Arrives armed far more often, spreads a bit slower.

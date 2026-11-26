@@ -42,6 +42,9 @@ class Settings:
     # Surprise: weight of the selection bonus for visits whose segments produced something never seen before:
     # a rarely-changing memory byte taking a value it never had (a door taking its first missile hit). 0: off.
     surprise: float = 0.0
+    # Choose like a hoarder: favor exploring from visits holding more of the hoarded bytes (see keep_more), so
+    # lineages that carry resources advance as fast as those that spent them. Weight of the bonus; 0: off.
+    favor_holdings: float = 0.0
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
