@@ -976,3 +976,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   vertical shaft); the resulting saves are dead ends. (A side scare: 0x74 reads 0x00 vs 0x10 at the same map
   position, but every 0x00 position also occurs as 0x10, i.e. both are Brinstar as noted; my odd-looking pair was a
   mid-door-transition save.) Fix: pick the continuation save by reachability (quick tries; most distinct places).
+- **Reference run** (one long cheat exploration from the Bombs save keeping its whole archive: `go_explore.py
+  reference --start-state cache/start-bombs.state --refill ... --repeat-probability 0.99 --repeat-spread 0.09`,
+  20 workers). Restarting fresh from each acquisition (`chain.py`) lost every healthy frontier: all Ice Beam holders
+  came through the scroll glitch and backtracking to them stalled too. Keeping the archive: Norfair + Kraid area
+  1.7 min, missile pack 2.7, Ice Beam 3.1, 2nd tank 6.6, Ridley area 9.5, High Jump 11.6, missiles 20 at 12.5;
+  then **nothing for 52 min** (225 -> 312 rooms; 24K places; 79K frames/s). Newest rooms (montage) are deep in
+  Ridley's area. Self-inflicted wall: the refill set missiles to 5, so no try can beat a boss. Resumed as
+  `reference2` with missiles refilled to 99 (`--refill 4218:99,4217:99,...`).

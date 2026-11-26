@@ -60,6 +60,7 @@ class Archive:
     mastery_weight: float = 0.0
     chooser_weight: float = 0.0  # see explorers.Settings.learned_chooser
     chooser: tuple = None  # (weights, bias, means, scales) of the learned chooser, once fit
+    cached_weights: tuple = None  # (archive size, choice probabilities, uses) reused by choose
     progress: list = field(default_factory=list)  # how far along the guide route each visit is (0-1)
     # The locations each visit's lineage passed through, snapshotted when the visit was kept (parent links
     # can loop after slot reuse; these can't). Kept only when exploring with a refill (to pay back cheats).
@@ -107,21 +108,33 @@ class Archive:
 
     SIGNALS = ["rarely chosen", "holdings", "danger", "surprise rate", "death rate", "success rate", "path length"]
 
-    def signals(self):
-        """[visits, drives]: each visit's drive signals as they stand now (the learned chooser's senses)."""
-        tries = 1 + np.array(self.times_chosen, float)
-        held = np.array([sum(h) for h in self.holdings], float) if self.holdings and len(self.holdings[0]) else np.zeros(len(tries))
-        dangers = np.array(self.dangers + [0.0] * (len(tries) - len(self.dangers)), float)
-        lengths = np.array([self.path_length(i) for i in range(len(tries))], float)
-        return np.stack([1 / np.sqrt(tries), held, dangers, np.array(self.surprises) / tries,
-                         np.array(self.deaths) / tries, np.array(self.productive) / tries,
-                         np.minimum(lengths, 1e5)], 1)
+    def signals(self, visits=None):
+        """[visits, drives]: the drive signals of the given visits (default all) as they stand now (the learned
+        chooser's senses)."""
+        visits = range(len(self.places)) if visits is None else visits
+        pick = lambda values, default=0.0: np.array([values[i] if i < len(values) else default for i in visits], float)
+        tries = 1 + pick(self.times_chosen)
+        held = np.array([sum(self.holdings[i]) for i in visits], float)
+        lengths = np.array([self.path_length(i) for i in visits], float)
+        return np.stack([1 / np.sqrt(tries), held, pick(self.dangers), pick(self.surprises) / tries,
+                         pick(self.deaths) / tries, pick(self.productive) / tries, np.minimum(lengths, 1e5)], 1)
 
     def choose(self, rng):
         """
         A rarely chosen visit still worth keeping. Chooses among places, not visits (each place's weight split
-        evenly between its kept visits), so places holding several kept visits don't slow coverage.
+        evenly between its kept visits), so places holding several kept visits don't slow coverage. Weights take
+        time proportional to the archive, so they are reused for WEIGHTS_REUSE choices while it grows under 1%.
         """
+        size, probabilities, uses = self.cached_weights or (0, None, WEIGHTS_REUSE)
+        if uses >= WEIGHTS_REUSE or len(self.places) > size * 1.01:
+            weights = self.weights()
+            size, probabilities, uses = len(self.places), weights / weights.sum(), 0
+        index = int(rng.choice(size, p=probabilities))
+        self.cached_weights = (size, probabilities, uses + 1)
+        self.times_chosen[index] += 1
+        return index
+
+    def weights(self):
         active = np.array(self.active)
         place_of = np.array([self.place_numbers[p] for p in self.places]) if len(self.place_numbers) else None
         visits_per_place = np.bincount(place_of, weights=active)
@@ -146,12 +159,11 @@ class Archive:
         if self.holdings_weight and self.holdings and len(self.holdings[0]):
             held = np.array(self.holdings, dtype=float).sum(1)
             weights = weights * (1 + self.holdings_weight * held / max(held.max(), 1e-9))
-        index = int(rng.choice(len(self.places), p=weights / weights.sum()))
-        self.times_chosen[index] += 1
-        return index
+        return weights
 
 
 CHOOSER_REFIT_EVERY, CHOOSER_WINDOW = 2000, 50000
+WEIGHTS_REUSE = 200  # choices between recomputing choice weights (see Archive.choose)
 GAIN_KEYS = ("items", "energy tanks", "max missiles", "bosses")  # progress fields --stop-at-gain watches
 CHOOSER_LAG = 5000  # decisions a "later" label waits for its lineage to grow
 
@@ -322,7 +334,7 @@ def main():
     def assign(worker_index):
         index = archive.choose(rng)
         # A copy: a row view would keep the whole signals table alive for every logged decision.
-        pending_signals[worker_index] = archive.signals()[index].copy()
+        pending_signals[worker_index] = archive.signals([index])[0]
         start_paths[worker_index] = archive.paths[index]
         explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates,
                        archive.paths[index][-1] if archive.paths[index] else None)
