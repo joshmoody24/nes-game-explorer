@@ -1111,3 +1111,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   room pooling ties from Bombs and is ~11% worse after Kraid; run-to-run spread (38-75) is bigger than the effect.
   Likely reason: success ("found a new place") is rare (< 1% of tries), so sampling favors a few lucky saves while
   1/sqrt(times chosen) keeps rotating for coverage. Kept classic; option left in.
+- **Current honest wall: climbing out of the Kraid-elevator shaft in Brinstar.** Both post-Kraid stages (`honest5`
+  60 min, `honest6` 18 min from the richest Brinstar save) only reach the 9 Brinstar cells of the x=6 shaft from (14,6)
+  down to the Kraid elevator at (18,6) (plus (18,7), (18,8), (19,7)); the rest is back in Kraid's lair. The first
+  uncheated run came the other way: (14,6) is a horizontal room (blue doors both sides, Brinstar room table found at
+  0x6324) with a hole in its floor into the shaft; it walked in from the left door and fell. Coming up, tries from the
+  top of the shaft reach neither door (0/1200); holding left+fire slides back down to (16,6). The Norfair elevator is
+  at (12,22) (replayed from `honest1`'s shortest path into Norfair). Same shape as earlier walls: easy to fall, hard
+  to climb back.
