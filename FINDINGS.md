@@ -683,3 +683,18 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   stuck in room (8,11) at the same hop both times (409K steps of retries): a hop that needs a precise climb,
   which neither recorded chunks nor 200 random 60-step tries make from that state. Resources survive travel
   now; skillful hops don't.
+
+## 2026-11-25 (night): carrying an armed state to the door makes the Long Beam reliable
+
+- **Local exploration for hard hops** (`graph._local_search`): when no recorded chunk or quick random try
+  makes a hop, a small Go-Explore from the current state (locations, richest visit kept, sticky random
+  segments) returns the furthest-along and richest of its first 20 arrivals. First version returned the
+  first arrival: reached the door room after 38 hops but spent all missiles.
+- `python -m checks.carry_check cache/start-near-door-armed.state "fast3/*"`: the armed start (10 missiles,
+  room 7,12) was **delivered high in the door room (room y 87) holding 5 missiles**, after 37 hops
+  (529K emulator steps of hop attempts, ~6 min, one process). 300 isolated random segments from there: 0
+  openings (2 energy: short tries die).
+- **Exploration from the delivered state** (`cache/carried-to-door.state`, missile hoarding, 3 seeds x 6
+  workers): **Long Beam in 3/3, at 42, 70 and 124 s**. Versus 1/3 in 15 min from the missile pickup without
+  carrying. Composition (carry what you hold to where it's needed, then explore) turns the chain of luck
+  into a deliberate step. Still diagnostic: the target (high spots in the door room) was picked by hand.
