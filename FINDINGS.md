@@ -868,3 +868,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   (5%, 0.05%): 2,048 bytes, 8 per room, **74%**; (10%, 0.02%): 2 per room, 55%. Matches screenshots (76% at 10)
   with no rendering, from RAM, game-agnostic. Metroid's map x/y bytes are excluded (they also change while
   scrolling within a room); room-layout data is picked instead. Missing: generic position within a room.
+- **Position bytes found by pushing buttons** (`python -m checks.position_bytes_check 1500`, 29 s): hold RIGHT vs
+  LEFT (and DOWN vs jump) for 8 steps from 1,500 library states; rank bytes by how consistently they differ.
+  Metroid's x byte ranks 3rd, y byte 1st (byte 20, top on both axes, is likely the controller-input copy:
+  needs filtering out). So both halves of a place (which room, where in it) can be found from RAM without
+  game knowledge.
