@@ -1077,3 +1077,12 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Honest Kraid kill**: from a realistic best arrival (2 full tanks = 299 energy, 15/15 missiles, set once, no
   refills; the uncheated run had 2 tanks and capacity 15 by then), record places beat Kraid within 12 min (22
   workers; 609 saves after the kill). The fight is solved; the gap is arriving full (honest arrivals: ~13 energy).
+- **Farming works**: from the honest Kraid-room save (13 energy, 0 missiles), 3.4 min x 10 workers of hoarding
+  (`--keep-more 4217,263`) -> richest healthy save 1 full tank + 23 (123 energy), 7 missiles; with
+  `--favor-holdings 3`: 98 energy, 3 missiles (no better). Target for the kill: ~299 energy, 15 missiles.
+- **First boss beaten by the method, no cheats: Kraid.** Chain, all uncheated: Bombs save -> honest exploration
+  (`honest1`/`honest2`: long holds, record places, missile + energy hoarding) reached his room -> 20-min exploration
+  from a healthy honest save there farmed to 2 full tanks + 99 (299 energy) and 10 missiles but fought from poorer
+  branches (Kraid to 50) -> **layer from the richest healthy save** (`pickrich.py`): Kraid dead within 12 min (2,490
+  saves after the kill). Loop that should repeat: explore + hoard (farm) -> layer from the richest healthy save ->
+  record places win the fight. cache/after-kraid-honest.state.
