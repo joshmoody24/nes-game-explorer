@@ -4,7 +4,7 @@ whether energy drops (damage) and whether missiles drop (spending) within the ne
 compares with the same model blind to the button: if the button adds little, a careful explorer can't steer
 with it. Held-out recordings, AUC. Energy and missile bytes are named by hand here (labels only).
 
-Usage: python -m checks.careful_check <run name>[+<run name>...] [recordings]
+Usage: python -m checks.careful_check <run name>[+<run name>...] [recordings] [--save <path>]
 """
 
 import os
@@ -23,7 +23,7 @@ from explorers import ROM
 from metroid import CURRENT_MISSILES, at, energy_of
 from training import init_mlp, mlp
 
-HORIZON = 3
+HORIZON = 10
 
 
 def auc(scores, labels):
@@ -52,7 +52,7 @@ def examples(experience, byte_indices):
     return np.concatenate(states), np.concatenate(buttons), np.concatenate(labels)
 
 
-def train(states, buttons, labels, use_button, key, steps=4000, batch=2048):
+def train(states, buttons, labels, use_button, key, steps=4000, batch=2048, keep_params=False):
     width = states.shape[1] + len(ACTIONS)
     params = init_mlp(key, (width, 256, 128, 2))
     optimizer = optax.adam(1e-3)
@@ -73,6 +73,8 @@ def train(states, buttons, labels, use_button, key, steps=4000, batch=2048):
 
     for k in jax.random.split(key, steps):
         params, opt_state, _ = step(params, opt_state, k)
+    if keep_params:
+        return params
     return lambda s, b: np.asarray(jax.nn.sigmoid(mlp(params, features(jnp.asarray(s), jnp.asarray(b)))))
 
 
@@ -87,6 +89,16 @@ def main():
     test_states, test_buttons, test_labels = examples(build(emulator, recordings[split:count], byte_indices), byte_indices)
     print(f"{len(train_data[2]):,} training steps; rates: damage {train_data[2][:, 0].mean():.1%}, "
           f"missile spending {train_data[2][:, 1].mean():.1%}", flush=True)
+    if "--save" in sys.argv:
+        path = sys.argv[sys.argv.index("--save") + 1]
+        params = train(*train_data, False, jax.random.key(0), keep_params=True)
+        two_heads = jax.tree.map(np.asarray, params)
+        damage_only = two_heads[:-1] + [{"w": two_heads[-1]["w"][:, :1], "b": two_heads[-1]["b"][:1]}]
+        # The button inputs are zeroed when blind to the button, so drop their rows from the first layer.
+        damage_only[0] = {"w": damage_only[0]["w"][:len(byte_indices)], "b": damage_only[0]["b"]}
+        Path(path).write_bytes(__import__("pickle").dumps((damage_only, byte_indices)))
+        print(f"saved the damage model to {path}")
+        return
     for use_button in [False, True]:
         predict = train(*train_data, use_button, jax.random.key(0))
         scores = np.concatenate([predict(test_states[i:i + 8192], test_buttons[i:i + 8192])

@@ -22,6 +22,7 @@ import numpy as np
 
 from emulator import Emulator
 from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings
+import danger
 from metroid import start_game
 from progress import Progress
 
@@ -52,6 +53,8 @@ class Archive:
     deaths: list = field(default_factory=list)  # segments started from each visit that ended in game over
     surprise_weight: float = 0.0  # see explorers.Settings.surprise
     holdings_weight: float = 0.0  # see explorers.Settings.favor_holdings
+    dangers: list = field(default_factory=list)  # see explorers.Settings.danger_model
+    danger_weight: float = 0.0
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
@@ -101,6 +104,9 @@ class Archive:
         weights = active / np.sqrt(1 + chosen) / np.maximum(visits_per_place[place_of], 1)
         # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
         weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
+        if self.danger_weight and self.dangers:
+            danger = np.array(self.dangers)
+            weights = weights / (1 + self.danger_weight * danger / max(float(np.median(danger)), 1e-6))
         if self.holdings_weight and self.holdings and len(self.holdings[0]):
             held = np.array(self.holdings, dtype=float).sum(1)
             weights = weights * (1 + self.holdings_weight * held / max(held.max(), 1e-9))
@@ -217,7 +223,8 @@ def main():
     if args.resume:
         archive = resumed_archive(args.resume, settings, emulator)
     else:
-        archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings)
+        archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings,
+                          danger_weight=settings.avoid_danger if settings.danger_model else 0.0)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()
@@ -255,6 +262,13 @@ def main():
                                           None if start_path is None else start_path + segment.actions[:length - len(start_path)])
                             for place, (state, length, held) in segment.found.items()]
                 new_places = outcomes.count("new")
+                if settings.danger_model:
+                    while len(archive.dangers) < len(archive.states):
+                        archive.dangers.append(0.0)
+                    for place, (state, _, _) in segment.found.items():
+                        for i in archive.index.get(place, []):
+                            if archive.states[i] is state:
+                                archive.dangers[i] = danger.score(settings.danger_model, emulator.memory(state))
                 archive.surprises[segment.start] += len(segment.patterns - seen_patterns)
                 archive.deaths[segment.start] += segment.died
                 seen_patterns |= segment.patterns

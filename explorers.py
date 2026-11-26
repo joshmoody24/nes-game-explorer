@@ -48,6 +48,10 @@ class Settings:
     # Diagnostic ceiling ("what if resources were free?"): comma-separated "index:value" memory edits applied to
     # every segment's start state, e.g. refilling ammo and health. Empty: off.
     refill: str = ""
+    # A saved danger model (see danger.py) and how strongly to avoid exploring from visits it scores as
+    # dangerous: weight / (1 + avoid_danger x danger / typical danger). Empty path: off.
+    danger_model: str = ""
+    avoid_danger: float = 0.0
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty

@@ -792,3 +792,7 @@ Damage is very predictable from the situation and not at all from the single but
 where you are decides whether you get hurt. Per-button steering can't make random play careful; avoiding
 damage takes multi-step behavior (a value function under the agent's own policy, i.e. real RL), or using
 the state-level danger prediction to choose which states to keep and explore from.
+- **Danger-guided selection** (`--danger-model cache/danger-model.pkl --avoid-danger 3`; model = memory-only
+  damage predictor, AUC 0.91), from the Long Beam, 3 seeds x 4 workers x 6 min each side: base 39/29/44 rooms,
+  safe 31/16/16 rooms; neither reached the Bombs door room. Avoiding danger also avoids the frontier. "Do the
+  right thing" beats "avoid the wrong thing" (Josh).
