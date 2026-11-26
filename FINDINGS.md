@@ -719,3 +719,11 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
 - Ranking poor dead ends by tries (wealth = missiles, no death filter): door room **#2 of 60 in the 45-min
   layer, absent from the top 60 in a 15-min layer**: the barrier signal needs long layers (enough armed
   tries at the door).
+- Barrier rankings (seconds, offline), door room's best rank among poor dead ends:
+  | ranking | 15-min layer (2,472 dead ends) | 45-min layer (101) |
+  |---|---|---|
+  | times tried | 131 | **2** |
+  | shortfall (richest - best held) x tries | **30** | 37 |
+  | shortfall, then tries | 75 | 69 |
+  No single ranking puts the door near the top in both; a portfolio would need the top 30-40. Paused here:
+  open question is a sharper general "where are resources needed?" signal.
