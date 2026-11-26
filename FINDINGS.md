@@ -818,3 +818,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   visit's drive signals to "did the segment find a new place", 266K segments from the drive runs: held-out AUC
   0.868, but **leaky** (features come from the final archive, including the predicted segments' own outcomes;
   success rate carried most weight). Next: log drive signals at selection time, then learn the chooser online.
+- **Learned chooser** (`--learned-chooser W`: drive signals logged at selection time, logistic model refit every
+  2000 decisions on the last 50K, selection x exp(W x standardized logit)), from the Long Beam, 2 seeds x 4
+  workers x 6 min: W=0 40/35 rooms, found-rate 0.87%/0.63%; **W=1 44/36 rooms, 1.07%/0.77% (~+23%)**; W=3
+  35/19, 0.69%/0.48% (over-concentrates). Clean offline check (base runs' decisions.npz, 220K decisions):
+  **held-out AUC 0.949**; weights: rarely chosen +0.86, success rate +0.12, death rate -0.10, path length
+  -0.06, holdings/danger/surprise ~0. The learner rediscovered Go-Explore's least-chosen rule; power doesn't
+  predict *immediate* discovery because resources pay off far away. Next: train the chooser on downstream
+  outcomes (did the lineage later get an acquisition / open new territory).
