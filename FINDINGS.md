@@ -1134,3 +1134,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   scrolled ~121 px into the top room and Samus slides down to (16,6). (13,6) has no room, so the exit isn't up through
   the ceiling: the side doors of (14,6) are above anything these saves see. The climb to the very top of the shaft is
   the wall (`--climb-records` extremes are measured in screen coordinates, which scroll, so they don't capture it).
+- **atlas.py**: one screenshot per map cell from any saved run (green border = an uncheated run reached it, orange =
+  only cheat runs, grey = on the ROM map, never reached). Uncheated coverage so far: Brinstar 125 cells, Kraid 100,
+  Norfair 60, Ridley 12, Tourian 0. It shows the post-Kraid wall plainly: the Kraid shaft (15-18,6) hangs under the
+  row-14 corridor, and the uncheated way in was a bombed hole in the corridor floor at (14,6) x~187 (frames from
+  honest1). The blocks regrow, so the way back up is a one-way gap for random play. Scripted probes from the highest
+  shaft saves (left/right jumps; shoot up then jump, also only under the hole) got 0 out of ~2,600.
