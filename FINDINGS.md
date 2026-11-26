@@ -772,3 +772,8 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   first slot). The wall before Bombs is reaching the room (the lava corridors drain energy); the ceiling run
   with energy refilled got Bombs in 416 s. Next: the same need/carry loop with energy as the resource, i.e.
   carry health toward where exploration keeps dying.
+- **Energy need** (`need_check lb-5min 263 ... [--from-poorest]`): byte-level energy tens has no candidates
+  (every dead end was once visited near full health); testing from the poorest visit at each dead end, need
+  is 0 everywhere. Limit of the need probe: 100 random steps only reveal short-range needs (a door next to
+  you); health pays off over long trips (surviving the lava corridors to the Bombs room). Long-range needs
+  call for a different counterfactual (e.g. the free-resource ceiling run itself, "cheat then pay back").

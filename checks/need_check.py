@@ -41,7 +41,7 @@ def _new_reached(task):
     return hits
 
 
-def needs(emulator, run_dir, byte, candidates=60, probes=300):
+def needs(emulator, run_dir, byte, candidates=60, probes=300, from_poorest=False):
     """
     (richest visit's state, candidate dead-end locations ranked by need, need per location). Need: extra probes
     reaching locations the archive never saw when the visit there holds the richest amount of byte.
@@ -51,9 +51,12 @@ def needs(emulator, run_dir, byte, candidates=60, probes=300):
     locs = [location(v) for v in views]
     known = frozenset(locs)
     held, tried, children, visit_at = defaultdict(int), defaultdict(int), set(), {}
+    poorest = {}
     for i, (loc, v, t) in enumerate(zip(locs, views, saved["times_chosen"])):
         if v[byte] >= held[loc]:
             visit_at[loc] = i
+        if loc not in poorest or v[byte] < views[poorest[loc]][byte]:
+            poorest[loc] = i
         held[loc] = max(held[loc], int(v[byte]))
         tried[loc] += t
     for p in saved["parents"]:
@@ -61,8 +64,13 @@ def needs(emulator, run_dir, byte, candidates=60, probes=300):
             children.add(locs[p])
     rich = max(held.values())
     richest = max(range(len(views)), key=lambda i: int(views[i][byte]))
-    dead = sorted((loc for loc in held if loc not in children and held[loc] < rich),
-                  key=lambda loc: -(rich - held[loc]) * tried[loc])[:candidates]
+    if from_poorest:
+        # For resources every place has once held plenty of (health), test from the typical poor visit.
+        visit_at = poorest
+        dead = sorted((loc for loc in held if loc not in children), key=lambda loc: -tried[loc])[:candidates]
+    else:
+        dead = sorted((loc for loc in held if loc not in children and held[loc] < rich),
+                      key=lambda loc: -(rich - held[loc]) * tried[loc])[:candidates]
     offset = emulator.state_offsets([byte])[0]
     tasks = []
     for loc in dead:
@@ -78,9 +86,9 @@ def needs(emulator, run_dir, byte, candidates=60, probes=300):
 def main():
     run, byte = sys.argv[1], int(sys.argv[2])
     candidates = int(sys.argv[3]) if len(sys.argv) > 3 else 60
-    probes = int(sys.argv[4]) if len(sys.argv) > 4 else 300
+    probes = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4].isdigit() else 300
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    _, ranked, need = needs(emulator, Path("runs") / run, byte, candidates, probes)
+    _, ranked, need = needs(emulator, Path("runs") / run, byte, candidates, probes, "--from-poorest" in sys.argv)
     door = [k for k, loc in enumerate(ranked) if loc[:3] == (0, 5, 8)]
     print(f"{len(ranked)} candidates x {probes} probes each way; door-room ranks {door[:4]} "
           f"(need {[need[ranked[k]] for k in door[:4]]}); top 6: {[(loc[:3], need[loc]) for loc in ranked[:6]]}")
