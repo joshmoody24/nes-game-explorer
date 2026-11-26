@@ -86,6 +86,7 @@ class Segment:
     actions: bytes  # index into ACTIONS for every step taken, so the segment can be replayed exactly
     start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
     patterns: frozenset = frozenset()  # (rarely-changing byte, new value) pairs seen, as byte * 256 + value
+    died: bool = False  # ended in game over
 
 
 def holdings(memory, settings):
@@ -111,7 +112,7 @@ _change_counts, _steps_watched = None, 0  # per worker process: how often each m
 def explore(emulator, rng, settings, known, start, start_state, start_path_length):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched
-    patterns = set()
+    patterns, died = set(), False
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
@@ -140,6 +141,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     patterns.update(int(b) * 256 + int(full_memory[b]) for b in rare)
         previous_memory = full_memory
         if memory[GAME_MODE] == GAME_OVER:
+            died = True
             break
         place = hand_made_place(memory, settings)
         new = place not in known and place not in found
@@ -158,7 +160,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),
-                   frozenset(patterns))
+                   frozenset(patterns), died)
 
 
 def worker(connection, settings, seed):

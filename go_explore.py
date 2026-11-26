@@ -49,6 +49,7 @@ class Archive:
     holdings: list = field(default_factory=list)  # see explorers.holdings
     active: list = field(default_factory=list)  # False once another visit to the same place beats it
     surprises: list = field(default_factory=list)  # new change patterns found by segments started from each visit
+    deaths: list = field(default_factory=list)  # segments started from each visit that ended in game over
     surprise_weight: float = 0.0  # see explorers.Settings.surprise
     holdings_weight: float = 0.0  # see explorers.Settings.favor_holdings
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
@@ -84,6 +85,7 @@ class Archive:
         self.holdings.append(held)
         self.active.append(True)
         self.surprises.append(0)
+        self.deaths.append(0)
         self.updates.append((place, visit))
         return "better" if visits else "new"
 
@@ -254,6 +256,7 @@ def main():
                             for place, (state, length, held) in segment.found.items()]
                 new_places = outcomes.count("new")
                 archive.surprises[segment.start] += len(segment.patterns - seen_patterns)
+                archive.deaths[segment.start] += segment.died
                 seen_patterns |= segment.patterns
                 if rng.random() < args.record:
                     recordings.add(segment)
