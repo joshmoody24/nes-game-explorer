@@ -777,3 +777,18 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   is 0 everywhere. Limit of the need probe: 100 random steps only reveal short-range needs (a door next to
   you); health pays off over long trips (surviving the lava corridors to the Bombs room). Long-range needs
   call for a different counterfactual (e.g. the free-resource ceiling run itself, "cheat then pay back").
+
+## 2026-11-25 (late): can "careful play" be learned cheaply from recordings?
+
+`python -m checks.careful_check layer-keep-45min+layer2-watch 6000` (~300K steps; MLP on RAM, with or without
+the button pressed; held-out AUC; energy/missile bytes named by hand as labels):
+| horizon | label (rate) | state only | state + button |
+|---|---|---|---|
+| 10 steps | damage (10.7%) | 0.912 | 0.909 |
+| 10 steps | missile spending (11.0%) | 0.807 | 0.832 |
+| 3 steps | damage (4.4%) | 0.935 | 0.935 |
+| 3 steps | missile spending (3.8%) | 0.832 | 0.864 |
+Damage is very predictable from the situation and not at all from the single button: under random play,
+where you are decides whether you get hurt. Per-button steering can't make random play careful; avoiding
+damage takes multi-step behavior (a value function under the agent's own policy, i.e. real RL), or using
+the state-level danger prediction to choose which states to keep and explore from.
