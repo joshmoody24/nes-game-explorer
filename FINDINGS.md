@@ -1103,3 +1103,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   when choosing): 107 rooms, back in Brinstar with Kraid dead, 3rd energy tank, missile capacity 105. Archive 201K
   places (energy x missile variants per place): next stage starts a new layer from the richest healthy save outside
   the lair.
+- **Thompson selection** (`--selection thompson|thompson-room`: Beta(1 + successes, prior + failures) per save,
+  prior = one success at the archive's rate, or at the room's rate pooled up from the archive's). 10 min, 3-4
+  workers, from the post-Kraid Brinstar save and from the Bombs save. Rooms (places): after Kraid: classic 85/75/79
+  (mean 80, 3,435 places), thompson-room 78/67/68 (mean 71, 3,079), thompson 66 (1 seed); from Bombs: classic
+  63/75/38 (mean 59, 2,653), thompson-room 75/65/39 (mean 60, 2,656), thompson 37. Plain Thompson clearly worse;
+  room pooling ties from Bombs and is ~11% worse after Kraid; run-to-run spread (38-75) is bigger than the effect.
+  Likely reason: success ("found a new place") is rare (< 1% of tries), so sampling favors a few lucky saves while
+  1/sqrt(times chosen) keeps rotating for coverage. Kept classic; option left in.
