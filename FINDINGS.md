@@ -910,3 +910,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   stretch to fill it. Pair with shortest-known labels (loop cutting where a state recurs; triangle rule
   d(A,C) <= d(A,B) + d(B,C) over recordings) so it learns the best route rather than copying roundabout ones.
   For the online-agent product; the save-scummer already keeps the shortest replayable path per place.
+- **Milestone race** (`tools/milestones.sh`, starts from `near_starts.py layer2-watch`: N steps before Bombs / the
+  first tank, 3 seeds x 3 workers x 3 min, plain vs pretrained chooser): Bombs-500 plain 2/3 (162, 172 s),
+  chooser 3/3 (106-150 s); Bombs-1000 2/3 (74, 80 s) vs 2/3 (46, 102 s); tank-500 2/3 (12, 20 s) vs 2/3 (6, 14 s);
+  tank-1000 0/3 vs 0/3. Total 6/12 vs 7/12: a tie. The chooser isn't the lever. Bombs from 1,000 steps away
+  in 1-3 min on 3 workers: this is a usable fast test of hard steps.
