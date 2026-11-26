@@ -48,6 +48,8 @@ class Archive:
     paths: list = field(default_factory=list)
     holdings: list = field(default_factory=list)  # see explorers.holdings
     active: list = field(default_factory=list)  # False once another visit to the same place beats it
+    surprises: list = field(default_factory=list)  # new change patterns found by segments started from each visit
+    surprise_weight: float = 0.0  # see explorers.Settings.surprise
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
@@ -80,6 +82,7 @@ class Archive:
         self.paths.append(path)
         self.holdings.append(held)
         self.active.append(True)
+        self.surprises.append(0)
         self.updates.append((place, visit))
         return "better" if visits else "new"
 
@@ -91,7 +94,10 @@ class Archive:
         active = np.array(self.active)
         place_of = np.array([self.place_numbers[p] for p in self.places]) if len(self.place_numbers) else None
         visits_per_place = np.bincount(place_of, weights=active)
-        weights = active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
+        chosen = np.array(self.times_chosen)
+        weights = active / np.sqrt(1 + chosen) / np.maximum(visits_per_place[place_of], 1)
+        # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
+        weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
         index = int(rng.choice(len(self.places), p=weights / weights.sum()))
         self.times_chosen[index] += 1
         return index
@@ -205,7 +211,7 @@ def main():
     if args.resume:
         archive = resumed_archive(args.resume, settings, emulator)
     else:
-        archive = Archive()
+        archive = Archive(surprise_weight=settings.surprise)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()
@@ -214,6 +220,7 @@ def main():
     gaps = []
     segment_log = {"start": [], "new_places": [], "frames": []}
     recordings = Recordings()
+    seen_patterns = set()  # every change pattern any segment has produced (see explorers.Settings.surprise)
     explorers = Explorers(args.workers, settings, args.seed)
 
     # The path to each worker's start state, as it was when assigned: the archive may replace that state
@@ -242,6 +249,8 @@ def main():
                                           None if start_path is None else start_path + segment.actions[:length - len(start_path)])
                             for place, (state, length, held) in segment.found.items()]
                 new_places = outcomes.count("new")
+                archive.surprises[segment.start] += len(segment.patterns - seen_patterns)
+                seen_patterns |= segment.patterns
                 if rng.random() < args.record:
                     recordings.add(segment)
                 segment_log["start"].append(segment.start)

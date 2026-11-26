@@ -39,6 +39,9 @@ class Settings:
     # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
     # in random play. Below 1, random play wastes missiles less often.
     select_weight: float = 1.0
+    # Surprise: weight of the selection bonus for visits whose segments produced something never seen before:
+    # a rarely-changing memory byte taking a value it never had (a door taking its first missile hit). 0: off.
+    surprise: float = 0.0
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
@@ -79,6 +82,7 @@ class Segment:
     gaps: list  # for each new place, steps since the previous new place (or since the segment began)
     actions: bytes  # index into ACTIONS for every step taken, so the segment can be replayed exactly
     start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
+    patterns: frozenset = frozenset()  # (rarely-changing byte, new value) pairs seen, as byte * 256 + value
 
 
 def holdings(memory, settings):
@@ -96,8 +100,15 @@ def beats(a, b):
     return all(x >= y for x, y in zip(held_a, held_b)) and (held_a != held_b or length_a <= length_b)
 
 
+RARE_CHANGE_RATE = 0.002  # bytes changing on fewer steps than this count toward change patterns
+WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
+_change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
+
+
 def explore(emulator, rng, settings, known, start, start_state, start_path_length):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
+    global _change_counts, _steps_watched
+    patterns = set()
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
@@ -117,6 +128,13 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         full_memory = emulator.memory(state)
         if previous_memory is not None:
             progress.see_change(previous_memory, full_memory)
+            if settings.surprise:
+                changed = full_memory != previous_memory
+                _change_counts = changed.astype(np.int64) if _change_counts is None else _change_counts + changed
+                _steps_watched += 1
+                if _steps_watched > WARMUP_STEPS:
+                    rare = np.flatnonzero(changed & (_change_counts < RARE_CHANGE_RATE * _steps_watched))
+                    patterns.update(int(b) * 256 + int(full_memory[b]) for b in rare)
         previous_memory = full_memory
         if memory[GAME_MODE] == GAME_OVER:
             break
@@ -136,7 +154,8 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                 break
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
-    return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state))
+    return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),
+                   frozenset(patterns))
 
 
 def worker(connection, settings, seed):
