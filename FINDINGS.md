@@ -1064,3 +1064,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   but Kraid still at 85. The one 83-energy arrival is doomed (0 energy within 10 steps): hoarding keeps it because
   the number looks good at that instant. Honest state: the method reaches Kraid with ~13 energy and <= 5 missiles.
   Next: arrive richer (farm drops / carry riches to where they're needed) and keep doomed saves out.
+- **Honest Kraid fight** (healthy honest save in his room: energy 13, 0 missiles; record places; no edits). 5 workers
+  x 3 min at four resource levels (real / +99 energy / +15 missiles / both, edited once): Kraid to 74 / 74 / 84 / 76:
+  resources barely matter at this budget; the beam alone does damage. 20 workers, 3 + 3 min: 62, then stuck: **every
+  lowest-HP save has Samus at 2 energy** (chosen 83-226 times, always dying). Keying records by holdings, and letting
+  saves that match a record count: 66 and 78 (n=1 each, no better); both reverted.
