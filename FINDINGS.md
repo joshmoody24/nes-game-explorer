@@ -698,3 +698,9 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   workers): **Long Beam in 3/3, at 42, 70 and 124 s**. Versus 1/3 in 15 min from the missile pickup without
   carrying. Composition (carry what you hold to where it's needed, then explore) turns the chain of luck
   into a deliberate step. Still diagnostic: the target (high spots in the door room) was picked by hand.
+- **Choosing carry targets without hand-picking**: "barriers" = dead-end locations (no visit there has
+  descendants) only ever reached poorer than the richest state, ranked by how often exploration tried them.
+  Short runs (3 min x 2 workers): 255-329 such places, tries flat (<= ~20), no signal. Long run
+  (`layer-keep-45min`): 101 such places; **the door room ranks #2** (950 tries); top 5 have ~900-1000 tries
+  each. Plan: after each layer, carry the richest state to the top few barriers in parallel, then explore from
+  each delivered state.
