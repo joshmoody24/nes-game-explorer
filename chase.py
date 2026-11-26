@@ -30,7 +30,7 @@ from explorers import ROM, Settings, hand_made_place
 from metroid import ITEMS, MAX_MISSILES, area_of, at
 
 TARGETS = {"morph": lambda memory: memory[at(ITEMS)] & 0x10, "missiles": lambda memory: memory[at(MAX_MISSILES)] > 0,
-           "norfair": lambda memory: area_of(memory) == 1}
+           "norfair": lambda memory: area_of(memory) == 1, "bombs": lambda memory: memory[at(ITEMS)] & 0x01}
 
 
 def route(emulator, run, target):

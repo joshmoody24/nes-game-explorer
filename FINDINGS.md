@@ -650,3 +650,10 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   min: no Long Beam (missile branch best each time: 86 and 71 rooms). Budget too small: the earlier
   portfolio's missile branch needed ~16 min at 4 workers; 75% of compute went to junk branches.
   Next: top 2 spendables, 8 workers each, 15-min layers.
+- `runs/climb4` (top 2 spendables x 8 workers x 15 min, stall stop 3 min): layer 1 (second missile tank, in
+  Norfair): missile branch stalled at 332 s with 28 rooms while the other branch reached 90; layer 2 (first
+  tank): 83-87 rooms, no Long Beam in 12 min. Stopped. The stall rule may be too aggressive for slow starts.
+- **Playback check** (`chase.py ... --route cache/journey-to-bombs.pkl --target bombs --follower`): the
+  route follower on the stored 18,821-step power-on-to-Bombs path, 50 attempts: median 17 of 1,883
+  waypoints (best 23, ~200 steps). The save-scummer's path is reachable but not playable as is: it needs
+  shortening and re-planning (phase 2).
