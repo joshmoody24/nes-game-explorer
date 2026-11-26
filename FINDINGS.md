@@ -1007,3 +1007,32 @@ the state-level danger prediction to choose which states to keep and explore fro
   HP bands down to 0-9 in 3 min; resumed with 1035:2: down to HP 1. From HP 1, 12% of 200-step tries start his death
   explosion (slot status 3); the statue byte then becomes **0x02** (Kraid gave 0x01), so a boss kill = statue low
   bits (progress.py fixed again). Surviving post-kill save: cache/after-ridley.state. Both bosses beaten (separately).
+- **Tourian** (diagnostic chain). Elevator found by searching the ROM for item entries `04 EE` (elevator, EE =
+  destination; the Data Crystal example for Brinstar->Kraid sits at 0x6449): Brinstar entry at 0x63EB puts the
+  Tourian elevator at map (2,3), behind the statue room (2,4). With the boss-dead bits edited into a save *before*
+  the statue room loads, the statues rise and the bridge forms (single tries reach (2,3) 0.1%; harvested one with
+  `harvest.py`); a 2-min exploration from the elevator room entered Tourian ($74 = 0x13). `frontier_walk.py`
+  (repeated 2-min explorations restarting at the newest cell) stalled at (7,9): **Metroids latch on and drain ~8
+  energy/step** (6 full tanks gone in ~85 steps); HP 255 until frozen. With 6 tanks edited in and enemy slots 0-3
+  status ($6AF4+16k, frozen = 4) and HP (bands of 32) in the place, a 3-min exploration got past them to (11,10)
+  (151K places). Walk continues from there.
+- Tourian walk past the Metroids reached row 11 west to (11,4): **Mother Brain's Zebetite room** (pink mesh
+  barriers on pillars, Rinkas). Mother Brain status $98 / hits $99 (dies at 0x20) confirmed from the 6502disassembly
+  defines; no Zebetite variables documented anywhere reachable. Two guessed counters (0x63C/0x63D, they dropped while
+  firing) change everywhere: not Zebetites. Walk's "newest cell" rule also picks side branches (e.g. (12,10)).
+- **Reference reaches the ending** (diagnostic chain, stitched from segments with heavy cheats and Metroid
+  knowledge; NOT the method beating the game). Zebetites: no documented RAM; damage-byte finder
+  (`checks/damage_bytes.py`: paired tries with/without the fire button; finds Ridley's $040B unaided, misses Kraid's
+  because random shots rarely land) found only flags/turret counters there. What worked: `--place-nametable` (crc of
+  the background tile layout in the place, so shot-down scenery counts) + `--stay` (tries end on leaving listed map
+  cells) in the Zebetite room: through to Mother Brain in 3 min, her hits to 21; resumed 3 min: dying, gone, time
+  bomb set ($98 = 6). Escape: up the shaft x=1 from (11,1) to (3,1); the game-end elevator (item 04 8F at (3,1);
+  object slot $0320, last byte 0x8F, at x=128 y=131): standing on it at (128,112) and pressing UP -> $6883 = 1,
+  credits ($7B) 438 steps later, "The End". cache/ending.state.
+  **Walls found, in order** (each needed its own fix): long jumps (hold length), glitched dead-end saves (keep one
+  archive), archive bloat/speed (cache choice weights), frontier dilution (short explorations restarted at the
+  newest frontier), lava-doomed saves (energy refills), boss damage invisible (enemy HP in place), Metroids
+  (enemy status/HP in place + tanks), statues/elevator (boss flags before room load), Zebetites/Mother Brain
+  (scenery fingerprint in place + focus), the escape (an elevator random play never stands on long enough).
+  General lesson: **every wall after Bombs was "progress the place can't see"** (HP, scenery, object state) or
+  "effort spread too thin" (frontier/focus). Next: make both automatic and drop the cheats.

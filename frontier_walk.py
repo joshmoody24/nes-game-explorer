@@ -4,6 +4,8 @@ restarts from a save in the most recently discovered map cell (optionally only c
 since a short exploration started at a frontier covers it far faster than one huge archive. Reports Mother Brain's
 status ($98) and hit count ($99) and stops when the hit count moves or the ending starts ($6883).
 
+Extra place bytes (e.g. enemy status and hit points) come from the PLACE_BYTES environment variable.
+
 Usage: python frontier_walk.py <name> <start state> <rounds> <minutes> <refill edits> [area byte, e.g. 0x13]
 """
 
@@ -28,7 +30,7 @@ def main():
         run = f"{name}/round{r}"
         subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", minutes, "--workers", "20", "--start-state",
                         str(start), "--refill", refill, "--repeat-probability", "0.99", "--repeat-spread", "0.09",
-                        "--place-bytes", "152:1,153:1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        "--place-bytes", ",".join(filter(None, ["152:1,153:1", os.environ.get("PLACE_BYTES", "")]))], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         saved = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))
         views = [(s, emulator.view(s)) for s in saved["states"]]
         if area is not None:

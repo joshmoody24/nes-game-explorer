@@ -80,6 +80,11 @@ class Settings:
     # Extra bytes that split places, "index:bucket,..." (e.g. an enemy's hit points, so damage dealt counts as
     # progress the archive keeps). Diagnostic until such bytes are found automatically.
     place_bytes: str = ""
+    # Diagnostic focus: map cells "y,x;y,x;..." a try must stay in (leaving ends it like a death). Empty: off.
+    stay: str = ""
+    # Add a fingerprint of the background tile layout to places, so scenery damage (e.g. a barrier being shot
+    # down) counts as progress. Pair with stay: scrolling also changes it.
+    place_nametable: bool = False
     # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
     # you were heading is usually the way on), instead of a random one.
     momentum: float = 0.0
@@ -185,6 +190,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         start_state = refilled(emulator, start_state, settings.refill)
     emulator.load(start_state)
     guarded = [int(b) for b in settings.no_damage.split(",") if b]
+    stay = {tuple(int(v) for v in cell.split(",")) for cell in settings.stay.split(";") if cell}
     guarded_before = guarded_value(emulator.view(start_state), guarded)
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
@@ -214,12 +220,13 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     rare = np.flatnonzero(changed & (_change_counts < RARE_CHANGE_RATE * _steps_watched))
                     patterns.update(int(b) * 256 + int(full_memory[b]) for b in rare)
         previous_memory = full_memory
-        if memory[GAME_MODE] == GAME_OVER or (guarded and guarded_value(memory, guarded) < guarded_before):
+        if (memory[GAME_MODE] == GAME_OVER or (guarded and guarded_value(memory, guarded) < guarded_before)
+                or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay)):
             died = True
             break
         if guarded:
             guarded_before = guarded_value(memory, guarded)
-        place = hand_made_place(memory, settings)
+        place = hand_made_place(memory, settings) + ((zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ())
         new = place not in known and place not in found
         length = start_path_length + step + 1
         held = holdings(memory, settings)
