@@ -1200,3 +1200,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   (25,26); the Norfair column-30 climb; the (10,22) bricks that seal the Norfair elevator room off from the shaft above
   (the Ice Beam route comes down column 22 from the row-7 corridor, nesmaps map); the column-18 shaft doors on row 7.
   ice3 (from cache/col18-door.state): Ice Beam within 3 minutes.
+- **Uncheated chain reaches Tourian.** From the Ice Beam save (0 missiles, 164 energy): honest11 a-c (3-minute
+  chunks, turbo) farmed to 19-21 missiles while wandering Brinstar, stalled with the column-11 shaft topping out in
+  row 3; a layer from the highest healthy column-11 save with >= 5 missiles (3 energy!) went up, left along row 2,
+  through the statue room and into Tourian within 3 minutes (tourian-approach).
