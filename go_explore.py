@@ -143,6 +143,13 @@ class Archive:
 
 
 CHOOSER_REFIT_EVERY, CHOOSER_WINDOW = 2000, 50000
+CHOOSER_LAG = 5000  # decisions a "later" label waits for its lineage to grow
+
+
+def lineage_sizes(parents):
+    """Number of descendants of every visit (cycles from slot reuse are cut)."""
+    from checks.value_check import descendants
+    return descendants(parents)
 
 
 def fit_chooser(x, y, steps=300, rate=0.2):
@@ -328,8 +335,19 @@ def main():
                 decisions["visit"].append(segment.start)
                 decisions["created"].append(created)
                 if len(decisions["found"]) % CHOOSER_REFIT_EVERY == 0:
-                    archive.chooser = fit_chooser(np.array(decisions["signals"][-CHOOSER_WINDOW:]),
-                                                  np.array(decisions["found"][-CHOOSER_WINDOW:], float))
+                    if settings.chooser_target == "later":
+                        old = len(decisions["found"]) - CHOOSER_LAG
+                        if old > CHOOSER_REFIT_EVERY:
+                            window = range(max(0, old - CHOOSER_WINDOW), old)
+                            size = lineage_sizes(archive.parents)
+                            growth = np.array([sum(1 + size[c] for c in decisions["created"][k]) for k in window], float)
+                            positive = growth[growth > 0]
+                            if len(positive):
+                                labels = (growth >= np.quantile(positive, 0.98)).astype(float)
+                                archive.chooser = fit_chooser(np.array([decisions["signals"][k] for k in window]), labels)
+                    else:
+                        archive.chooser = fit_chooser(np.array(decisions["signals"][-CHOOSER_WINDOW:]),
+                                                      np.array(decisions["found"][-CHOOSER_WINDOW:], float))
                 seen_patterns |= segment.patterns
                 if rng.random() < args.record:
                     recordings.add(segment)

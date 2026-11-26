@@ -59,6 +59,9 @@ class Settings:
     # (see go_explore.Archive.signals) whether exploring from it finds a new place. 0: off (signals and
     # outcomes are still logged to decisions.npz).
     learned_chooser: float = 0.0
+    # What the learned chooser predicts: "now" (the segment found a new place) or "later" (the visits it
+    # created grew into a top-2% lineage, judged on decisions old enough to have grown).
+    chooser_target: str = "now"
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
