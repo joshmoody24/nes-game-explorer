@@ -842,3 +842,8 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Multi-horizon, offline** (`python -m checks.horizons_check downstream/s0 downstream/s1`): held-out AUC for
   long-range success: immediate chooser 0.690, downstream 0.751, sum 0.729, learned mix 0.739. Combining
   horizons adds nothing; the long-range label is what matters.
+- **Pooled data** (Josh: are we using it fully?): `library.py build` indexes every state any run kept:
+  **809,006 states from 150 runs in 28 s** (about 12.5K hold Bombs, about 20K hold an energy tank *without* the
+  Long Beam, the Long Beam is not required for the tank). Long-range chooser refit on 8 pooled decision logs
+  (1.36M decisions, 4x): held-out AUC 0.751 -> **0.777**; weights: immediate label rarely chosen +0.93,
+  holdings -0.03; long-range label rarely chosen +0.17, holdings **+0.09**. Pooling helps the rare-label model.
