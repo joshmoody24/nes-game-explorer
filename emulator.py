@@ -69,6 +69,10 @@ def button_mask(*names):
     return sum(1 << BUTTONS[name] for name in names)
 
 
+TURBO = 1 << 15  # not a real button: Emulator.run presses A and B for only the first half of the frames
+TURBO_BUTTONS = button_mask("A", "B")
+
+
 class Emulator:
     """
     One emulator per process: libretro cores keep their state in globals, so a second instance in
@@ -138,7 +142,14 @@ class Emulator:
             self._last_frame = (ctypes.string_at(data, height * pitch), width, height, pitch)
 
     def run(self, buttons=0, frames=1):
-        """Holds buttons for frames frames. The loop runs in C."""
+        """Holds buttons for frames frames. The loop runs in C. With TURBO set, A and B are let go for the second
+        half: most games act once per press, so holding fire fires once."""
+        if buttons & TURBO:
+            held = buttons & ~TURBO
+            pressed = frames // 2
+            self._buttons = held
+            self._shim.shim_run(self._retro_run, held, pressed)
+            buttons, frames = held & ~TURBO_BUTTONS, frames - pressed
         self._buttons = buttons
         self._shim.shim_run(self._retro_run, buttons, frames)
 

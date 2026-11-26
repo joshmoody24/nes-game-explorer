@@ -1185,3 +1185,12 @@ the state-level danger prediction to choose which states to keep and explore fro
   11 energy (ridley-carry): the trip spends what farming built. Farming right outside the door gave 1 missile, 103
   energy. Wall: arrive rich (carry riches to where they are needed). Resumed runs keep no button paths, so routes
   found inside resumed archives cannot be replayed.
+- **Ridley beaten by the method, no cheats.** Fight layers from in-room saves took him 140 -> 109 HP slowly (~6 HP per
+  3-min layer). Probe: standing still facing him, holding LEFT+B for 60 steps does 1 HP; pressing B every step does 6.
+  Most games act once per press, so long holds fire once. Fix (general, any NES game): Emulator.run understands a
+  TURBO bit (A and B pressed for the first half of the step's frames only), and controls.ACTIONS gets turbo copies of
+  every action with A or B, appended last so old stored paths keep their meaning (env TURBO=1 for now). Race from the
+  109-HP save, 3 min x 10 workers: turbo 109 -> 78, plain 109 -> 89 (one seed). Ratchet (ratchet.py: next layer from
+  the lowest-boss-HP healthy save with >= 60 energy) with turbo: 78 -> dead within 3 min (ratchet-3, 1,984 saves
+  with Ridley dead). Chain so far: Bombs -> Kraid -> Kraid shaft -> Norfair -> lava corridor -> Ridley lair ->
+  Ridley's room -> Ridley, all uncheated; hand steps: choosing each layer's start save.
