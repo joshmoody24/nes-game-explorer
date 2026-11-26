@@ -704,3 +704,10 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   (`layer-keep-45min`): 101 such places; **the door room ranks #2** (950 tries); top 5 have ~900-1000 tries
   each. Plan: after each layer, carry the richest state to the top few barriers in parallel, then explore from
   each delivered state.
+- **Barrier carry, end to end** (`python -m checks.barrier_carry_check <run> 5 2`, `barriers.py`):
+  on `layer-plain-15min` (no hoarding): top barriers were Norfair spots near the layer start, and carrying
+  spent everything (hop arrivals were ranked furthest-first). Fixed to rank arrivals riches-first. On
+  `layer-keep-15min` (missile hoarding): delivered 10 / 6 / 9 / 9 / 3 missiles to the top 5 barriers, but
+  those were all low spots in Norfair rooms next to lava: "tried often, nothing beyond" also describes
+  **death traps**. Barriers must be where exploration survives yet finds nothing new; needs per-visit death
+  counts (not recorded yet).

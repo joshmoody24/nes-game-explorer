@@ -94,7 +94,7 @@ def _local_search(emulator, state, ahead, rng, keep, segments=3000, steps=40):
     A small Go-Explore from state toward any location in ahead, for hops no known chunk makes: an archive of
     locations, each keeping its richest visit (by keep) or else its first, explored from with sticky random
     segments, rarely chosen first. Of the first ARRIVALS_TO_COMPARE arrivals, returns the furthest along
-    and then richest, as (state, position on the chain); (None, -1) if none.
+    richest and then furthest along, as (state, position on the chain); (None, -1) if none.
     """
     archive = {location(emulator.memory(state)): [state, 0]}
     arrivals = []
@@ -114,7 +114,7 @@ def _local_search(emulator, state, ahead, rng, keep, segments=3000, steps=40):
             memory = emulator.memory()
             here = location(memory)
             if here in ahead:
-                arrivals.append(((ahead[here], keep(memory) if keep else 0), emulator.save()))
+                arrivals.append(((keep(memory) if keep else 0, ahead[here]), emulator.save()))
                 if len(arrivals) >= ARRIVALS_TO_COMPARE:
                     break
                 continue
@@ -124,7 +124,7 @@ def _local_search(emulator, state, ahead, rng, keep, segments=3000, steps=40):
                 archive[here][0] = emulator.save()
     if not arrivals:
         return None, -1
-    (index, _), best = max(arrivals, key=lambda arrival: arrival[0])
+    (_, index), best = max(arrivals, key=lambda arrival: arrival[0])
     return best, index
 
 
@@ -135,8 +135,8 @@ def travel(emulator, state, graph, targets, rng, keep=None, random_tries=200, ra
     shortest chain of locations; for each hop tries the known chunks, then random retries, accepting arrival
     anywhere further along the chain; a hop none of those makes gets a small local exploration (see
     _local_search). A hop that still can't be made is banned and the route re-planned.
-    keep(memory) -> comparable: when given, every candidate is tried and the arrival that gets furthest and
-    then scores highest is kept (e.g. holds the most), instead of the first arrival.
+    keep(memory) -> comparable: when given, every candidate is tried and the arrival that holds the most, then
+    gets furthest, is kept instead of the first arrival.
     Returns (arrived, last state, steps tried, hops made, the hop it last failed or None).
     """
     banned, steps, hops, failed = set(), 0, 0, None
@@ -155,7 +155,8 @@ def travel(emulator, state, graph, targets, rng, keep=None, random_tries=200, ra
             arrived, index = _hop(emulator, state, chunk, ahead)
             steps += len(chunk)
             if arrived:
-                rank = (index, keep(emulator.memory(arrived)) if keep else 0)
+                # Riches first: any arrival is progress, and carrying is for keeping what you hold.
+                rank = (keep(emulator.memory(arrived)) if keep else 0, index)
                 if best is None or rank > best[0]:
                     best = (rank, arrived, index)
                 if keep is None:
@@ -180,5 +181,9 @@ def _travel_task(task):
 
 
 def travel_many(states, world, targets, keep=None, seed=0):
-    """travel() for many states at once, in the worker processes. keep must be a module-level function."""
-    return list(workers.map(_travel_task, [(s, world, targets, seed + i, keep) for i, s in enumerate(states)]))
+    """
+    travel() for many states at once, in the worker processes: targets is one set of locations for all, or
+    a list with one set per state. keep must be a module-level function.
+    """
+    per_state = targets if isinstance(targets, list) else [targets] * len(states)
+    return list(workers.map(_travel_task, [(s, world, t, seed + i, keep) for i, (s, t) in enumerate(zip(states, per_state))]))
