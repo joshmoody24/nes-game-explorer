@@ -59,9 +59,9 @@ def main():
         emulator.run(ACTIONS[int(rng.integers(len(ACTIONS)))], FRAMES_PER_STEP - 1)
         frame_place(emulator.frame(0))
     with_frames = 2000 / (time.perf_counter() - started)
-    print(f"speed: {plain:,.0f} steps/s plain, {with_frames:,.0f} with a frame place every step "
+    if False: print(f"speed: {plain:,.0f} steps/s plain, {with_frames:,.0f} with a frame place every step "
           f"({with_frames / plain:.0%})", flush=True)
-    for width, height, levels in [(11, 8, 8), (16, 15, 8), (8, 6, 4)]:
+    for width, height, levels in [(11, 8, 4), (11, 8, 3), (11, 8, 2), (8, 6, 8), (6, 5, 8), (16, 15, 2), (5, 4, 8)]:
         places = []
         for state in states:
             emulator.load(state)

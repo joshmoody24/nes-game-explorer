@@ -856,3 +856,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   shades: 399 places, 30%. Pixels carry clean room information but make almost every state its own place
   (enemies, animation, HUD, scrolling); needs masking of moving things and adaptive coarseness (as Go-Explore
   did) and occasional rather than per-step rendering. A real project, not a quick win.
+  Coarseness sweep: 8x6/8 shades 10 places per room, 76% pure; 11x8/4 shades 7, 53%; 5x4/8 shades 8, 50%;
+  11x8/3 shades 1, 15%. No sweet spot: Metroid reuses tiles across rooms, so coarse screenshots of different
+  corridors match. Generic places need a learned representation (e.g. trained to separate states far apart in
+  steps) or a better RAM-based one, not plain downscaling.
