@@ -796,3 +796,10 @@ the state-level danger prediction to choose which states to keep and explore fro
   damage predictor, AUC 0.91), from the Long Beam, 3 seeds x 4 workers x 6 min each side: base 39/29/44 rooms,
   safe 31/16/16 rooms; neither reached the Bombs door room. Avoiding danger also avoids the frontier. "Do the
   right thing" beats "avoid the wrong thing" (Josh).
+- **Learned state value from the family tree** (`python -m checks.value_check layer-keep-45min 4217 0 5 0,5,8
+  [--per-try]`, 15-40 s): MLP from memory to log(1 + descendants): held-out correlation 0.10; counterfactual
+  missiles 0 -> 5: +0.001 (higher for 99% of visits, but negligible). Target confounded by age (early visits
+  have more descendants). Discoveries per try (children / times chosen): correlation 0.08, no missile effect.
+  Per-visit discovery is too sparse and noisy for 17K examples; a learned "is this state good" needs a denser
+  signal (e.g. per-step rewards for new places along recorded segments, learned with bootstrapping) or more
+  data.

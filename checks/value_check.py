@@ -4,7 +4,7 @@ log(1 + number of descendants) of each kept visit (how much new territory follow
 model counterfactuals: the same visits with a byte edited low vs high (e.g. missiles 0 vs 5), near a chosen
 room and everywhere. Diagnostic (the room and byte are named by hand only to read the result).
 
-Usage: python -m checks.value_check <run name> <byte> <low> <high> [area,y,x]
+Usage: python -m checks.value_check <run name> <byte> <low> <high> [area,y,x] [--per-try]
 """
 
 import os
@@ -52,11 +52,16 @@ def descendants(parents):
 
 def main():
     run, byte, low, high = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
-    room = tuple(int(x) for x in sys.argv[5].split(",")) if len(sys.argv) > 5 else None
+    room = tuple(int(x) for x in sys.argv[5].split(",")) if len(sys.argv) > 5 and "," in sys.argv[5] else None
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     saved = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))
     memories = np.stack([emulator.memory(s) for s in saved["states"]])
-    targets = np.log1p(descendants(saved["parents"])).astype(np.float32)
+    if "--per-try" in sys.argv:
+        # Direct discoveries per try: children found / times explored from the visit (not confounded by age).
+        children = np.bincount([p for p in saved["parents"] if p >= 0], minlength=len(saved["parents"]))
+        targets = np.log1p(children / (1 + np.array(saved["times_chosen"]))).astype(np.float32)
+    else:
+        targets = np.log1p(descendants(saved["parents"])).astype(np.float32)
     byte_indices = np.union1d(choose_bytes(emulator, valid_recordings(Path("runs") / run)[:1000]), [byte])
     x = memories[:, byte_indices].astype(np.float32) / 255
     rng = np.random.default_rng(0)
@@ -78,7 +83,7 @@ def main():
         params, opt_state, _ = step(params, opt_state, k)
     predict = lambda a: np.asarray(mlp(params, jnp.asarray(a)))[:, 0]
     pred = predict(x[test])
-    print(f"{len(x)} visits; held-out correlation of predicted vs actual log descendants: "
+    print(f"{len(x)} visits; held-out correlation of predicted vs actual target: "
           f"{np.corrcoef(pred, targets[test])[0, 1]:.2f}")
     column = int(np.flatnonzero(byte_indices == byte)[0])
     groups = {"everywhere": np.arange(len(x))}
