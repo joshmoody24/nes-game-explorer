@@ -81,6 +81,7 @@ class Archive:
             self.states[slot], self.paths[slot], self.holdings[slot] = state, path, held
             self.parents[slot] = parent
             self.updates.append((place, visit))
+            self.last_slot = slot
             return "better"
         self.place_numbers.setdefault(place, len(self.place_numbers))
         self.index.setdefault(place, []).append(len(self.places))
@@ -91,6 +92,7 @@ class Archive:
         self.paths.append(path)
         self.holdings.append(held)
         self.active.append(True)
+        self.last_slot = len(self.places) - 1
         self.surprises.append(0)
         self.deaths.append(0)
         self.productive.append(0)
@@ -281,7 +283,7 @@ def main():
     # (with a shorter path) while the worker explores from it.
     start_paths = [None] * explorers.count
 
-    decisions = {"signals": [], "found": []}
+    decisions = {"signals": [], "found": [], "visit": [], "created": []}
     pending_signals = [None] * explorers.count
 
     def assign(worker_index):
@@ -303,9 +305,12 @@ def main():
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
                 start_path = start_paths[worker_index]
-                outcomes = [archive.offer(place, state, held, segment.start,
-                                          None if start_path is None else start_path + segment.actions[:length - len(start_path)])
-                            for place, (state, length, held) in segment.found.items()]
+                outcomes, created = [], []
+                for place, (state, length, held) in segment.found.items():
+                    outcomes.append(archive.offer(place, state, held, segment.start,
+                                                  None if start_path is None else start_path + segment.actions[:length - len(start_path)]))
+                    if outcomes[-1]:
+                        created.append(archive.last_slot)
                 new_places = outcomes.count("new")
                 if settings.danger_model:
                     while len(archive.dangers) < len(archive.states):
@@ -319,6 +324,8 @@ def main():
                 archive.productive[segment.start] += new_places > 0
                 decisions["signals"].append(pending_signals[worker_index])
                 decisions["found"].append(new_places > 0)
+                decisions["visit"].append(segment.start)
+                decisions["created"].append(created)
                 if len(decisions["found"]) % CHOOSER_REFIT_EVERY == 0:
                     archive.chooser = fit_chooser(np.array(decisions["signals"][-CHOOSER_WINDOW:]),
                                                   np.array(decisions["found"][-CHOOSER_WINDOW:], float))
@@ -351,7 +358,9 @@ def main():
     explorers.close()
     checkpoint(run_dir, archive, segment_log, recordings)
     np.savez(run_dir / "decisions.npz", signals=np.array(decisions["signals"]), found=np.array(decisions["found"]),
-             names=np.array(Archive.SIGNALS))
+             names=np.array(Archive.SIGNALS), visit=np.array(decisions["visit"]),
+             created_offsets=np.cumsum([0] + [len(c) for c in decisions["created"]]),
+             created=np.array([i for c in decisions["created"] for i in c], int))
     if progress.ever_up is not None:
         # Every bit ever seen turning on, and every bit ever seen turning off, over every step of the run.
         np.savez(run_dir / "bit_flips.npz", ever_up=progress.ever_up, ever_down=progress.ever_down)
