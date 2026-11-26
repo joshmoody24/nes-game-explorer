@@ -77,6 +77,9 @@ class Settings:
     # Save-scum on damage: bytes of one number, most significant first (e.g. "263,262"); a try ends, like a
     # death, the moment that number drops, so nothing reached after taking damage is kept.
     no_damage: str = ""
+    # Extra bytes that split places, "index:bucket,..." (e.g. an enemy's hit points, so damage dealt counts as
+    # progress the archive keeps). Diagnostic until such bytes are found automatically.
+    place_bytes: str = ""
     # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
     # you were heading is usually the way on), instead of a random one.
     momentum: float = 0.0
@@ -106,9 +109,14 @@ def location(memory, settings):
     return room + where
 
 
+def extra_place(memory, settings):
+    return tuple(int(memory[int(index)]) // int(bucket or 1)
+                 for index, _, bucket in (item.partition(":") for item in settings.place_bytes.split(",") if item))
+
+
 def hand_made_place(memory, settings):
-    """Where (see location) and progress counters."""
-    return (*location(memory, settings),
+    """Where (see location), any extra place bytes, and progress counters."""
+    return (*location(memory, settings), *extra_place(memory, settings),
             int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5,
             int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None,
             energy_band(energy_of(memory)) if settings.health_buckets else None)

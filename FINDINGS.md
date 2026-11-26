@@ -984,3 +984,17 @@ the state-level danger prediction to choose which states to keep and explore fro
   then **nothing for 52 min** (225 -> 312 rooms; 24K places; 79K frames/s). Newest rooms (montage) are deep in
   Ridley's area. Self-inflicted wall: the refill set missiles to 5, so no try can beat a boss. Resumed as
   `reference2` with missiles refilled to 99 (`--refill 4218:99,4217:99,...`).
+- **Map-guided autopsy** (diagnostic: the world map is a 32x32 table in the ROM at 0x254E; RAM meanings from Data
+  Crystal's Metroid RAM map). reference2 (resumed with missiles 99) gained nothing in 45 min and slowed to 28K
+  frames/s at 43K places: `Archive.choose` + a full `signals()` table cost 12 ms per try; fixed (cached weights,
+  one signals row): 0.2 ms. The run had seen 323/511 map cells and **never a boss** ($6987 "Kraid/Ridley present"
+  = 0 in all 43K saves). `checks/frontier_check.py` (quick tries across every explored/unexplored map edge): almost
+  all 0 (map neighbours are mostly walls); 2 edges open at the bottom of Ridley's area. **Short explorations started
+  at frontiers** (3 min, 4 workers each, `checks/cells_check.py`) covered what the 43K-place archive missed: Ridley's
+  bottom row, Kraid's top, and **Kraid's room (29,8)**.
+- **Kraid**: 96 HP (enemy slot 0, $040B, mini-boss flag $040F bit 6). Plain exploration from his room: all 48 kept
+  saves at full HP; best single try leaves him at 80. Boss damage is invisible to places, so it can't accumulate.
+  With his HP in the place (`--place-bytes 1035:8`, diagnostic): saves in every 8-HP band down to 0-7, and **Kraid
+  is beaten** (statue byte bit 0, 38 saves) within 3 min. progress.py read bit 7 (statues raised, happens later) and
+  missed it; fixed to bit 0. Saved as cache/after-kraid.state. General version to build: find "enemy health" bytes
+  automatically (bytes that drop when you shoot, never refill) and add them to places.
