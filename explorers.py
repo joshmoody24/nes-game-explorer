@@ -45,6 +45,9 @@ class Settings:
     # Choose like a hoarder: favor exploring from visits holding more of the hoarded bytes (see keep_more), so
     # lineages that carry resources advance as fast as those that spent them. Weight of the bonus; 0: off.
     favor_holdings: float = 0.0
+    # Diagnostic ceiling ("what if resources were free?"): comma-separated "index:value" memory edits applied to
+    # every segment's start state, e.g. refilling ammo and health. Empty: off.
+    refill: str = ""
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
@@ -109,10 +112,21 @@ WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
 
 
+def refilled(emulator, state, edits):
+    """state with the "index:value" memory edits applied."""
+    pairs = [tuple(int(x, 0) for x in item.split(":")) for item in edits.split(",") if item]
+    edited = bytearray(state)
+    for offset, (_, value) in zip(emulator.state_offsets([index for index, _ in pairs]), pairs):
+        edited[offset] = value
+    return bytes(edited)
+
+
 def explore(emulator, rng, settings, known, start, start_state, start_path_length):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched
     patterns, died = set(), False
+    if settings.refill:
+        start_state = refilled(emulator, start_state, settings.refill)
     emulator.load(start_state)
     found, progress, gaps = {}, Progress(), []
     previous_memory = None

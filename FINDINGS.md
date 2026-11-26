@@ -749,3 +749,19 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   Beam in 64, 2 and 38 s**. On an archive that never got the Long Beam by itself in 15 min.
   Loop: explore with hoarding -> need-rank dead ends (counterfactual probes) -> carry from the nearest richer
   state -> explore.
+- **Second-agent review (evening)**: the design is becoming a pile (~10 mechanisms, most are Go-Explore with
+  a different keep rule, pick rule or start). Unifying frame: **"cheat, then pay back"**: edit what you hold
+  (spendables to max, event bits on, maybe position) in saved states; cheats that open new places become
+  debts ("be at L holding >= k of R"); one goal-directed Go-Explore (hard floor on R, pull toward L) pays
+  them; layers = a debt got paid (relaxed planning, applied to RAM). Biggest hidden risk for Zelda: `location`
+  still comes from hand-made places. Suggested: infinite-resources ceiling test; carry as a floored
+  Go-Explore (replacing graph.travel / local search); teleport and event-bit "need"; mined button chunks
+  for skills.
+- Ceiling test, too small (`--refill 4217:5,262:0x99,263:0x03`, a diagnostic: missiles and energy rewritten
+  at every segment start; 2 seeds x 4 workers x 5 min each): base 28/32 rooms, refill 70/34 rooms, no Long
+  Beam either way. Rerunning at 9 workers x 10 min from the first missiles and from the Long Beam.
+- **Ceiling with free resources** (9 workers x 10 min, missiles + energy rewritten at every segment start):
+  from the first missiles: **Long Beam at 154 s** (96 rooms); from the Long Beam: **Bombs at 416 s** (120
+  rooms, energy tank). Without the cheat: about a coin flip per 15 min, and ~20 min. Resources are the
+  binding constraint at these stages, not skill or places: carrying (paying back the cheat) is the right
+  lever, and a free-resource exploration is a fast way to find what opens next and where.
