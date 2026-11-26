@@ -847,3 +847,12 @@ the state-level danger prediction to choose which states to keep and explore fro
   Long Beam, the Long Beam is not required for the tank). Long-range chooser refit on 8 pooled decision logs
   (1.36M decisions, 4x): held-out AUC 0.751 -> **0.777**; weights: immediate label rarely chosen +0.93,
   holdings -0.03; long-range label rarely chosen +0.17, holdings **+0.09**. Pooling helps the rare-label model.
+- Free-resource run from the first missiles (18 workers, 12 min, stop at Bombs): Long Beam, 82 rooms, no Bombs
+  or energy tank. The earlier free-resource run from the Long Beam state got Bombs in 416 s; another from there
+  did not in 10 min. Even with free resources, Bombs is luck-dependent at this budget.
+- **Visuals as generic places** (`python -m checks.visual_check 3000`, 33 s): one frame place per step costs
+  **8x** (11,427 -> 1,450 steps/s). Frame places from 3,000 library states (129 rooms): 11x8 / 8 shades (Go-Explore's
+  setting): 2,803 places, 97% stay within one room, median 14 per room; 16x15: 2,985 places, 100%; 8x6 / 4
+  shades: 399 places, 30%. Pixels carry clean room information but make almost every state its own place
+  (enemies, animation, HUD, scrolling); needs masking of moving things and adaptive coarseness (as Go-Explore
+  did) and occasional rather than per-step rendering. A real project, not a quick win.
