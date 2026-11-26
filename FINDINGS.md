@@ -1086,3 +1086,10 @@ the state-level danger prediction to choose which states to keep and explore fro
   branches (Kraid to 50) -> **layer from the richest healthy save** (`pickrich.py`): Kraid dead within 12 min (2,490
   saves after the kill). Loop that should repeat: explore + hoard (farm) -> layer from the richest healthy save ->
   record places win the fight. cache/after-kraid-honest.state.
+- **After the honest Kraid kill** (`honest3`: 30 min x 22 workers from cache/after-kraid-honest.state, hoarding +
+  record places): richest healthy saves 299 energy + 81 missiles, but **never left Kraid's lair** (52 rooms, area
+  Kraid only). Kraid's exit elevator is at (18,7) (item 04 81 in Kraid's bank at 0x12282). Compared with `honest1`,
+  which came down via the row 21-22 corridors and the x=1 column, this run never climbs from row 23 to row 22 (quick
+  tries from (23,4), (23,7), (23,12): 0/3000) nor west from (27,3) to (27,2) (0/2000; room 0x1A: blue door left,
+  red right; screenshots show (27,3) is a vertical two-screen shaft with a solid left wall where Samus lands). No High
+  Jump or Ice Beam in these honest saves. Open: the honest route out of Kraid's lair.
