@@ -1177,3 +1177,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   A fresh 3-minute layer from the nearest healthy save (cache/ridley-door.state, 1 full tank): 534 saves in the
   room, boss present in 10. Same pattern as the lava corridor: a frontier starved inside a big archive, fixed by a
   fresh layer at the frontier.
+- **Ridley fight, uncheated, in progress: 140 -> 115 HP.** Ridley starts at 140 (boss HP in saves with him present).
+  Fight layers from in-room saves: 140 -> 119 over 9 min (ridley-door 1-3), 129 -> 115 in 3 min from the lowest-HP
+  healthy save (79 energy, 0 missiles). Too slow and energy-limited. Missiles are the lever but scarce: best in the
+  room 8; farming 3 min in the row-30 corridor raised the best healthy save from 4 to 25 missiles (394 energy, at
+  (30,16), cache/ridley-farmed.state), but a layer from it reached the door corridor (29,18) only with 0 missiles and
+  11 energy (ridley-carry): the trip spends what farming built. Farming right outside the door gave 1 missile, 103
+  energy. Wall: arrive rich (carry riches to where they are needed). Resumed runs keep no button paths, so routes
+  found inside resumed archives cannot be replayed.
