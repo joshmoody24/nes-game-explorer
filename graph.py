@@ -15,6 +15,7 @@ from controls import ACTIONS, FRAMES_PER_STEP
 from explorers import Settings, hand_made_place
 
 CHUNKS_PER_EDGE = 6
+ARRIVALS_TO_COMPARE = 20  # local exploration keeps the richest of this many arrivals
 
 
 def location(memory):
@@ -88,12 +89,52 @@ def _random_chunk(rng, steps):
     return bytes(chunk)
 
 
+def _local_search(emulator, state, ahead, rng, keep, segments=3000, steps=40):
+    """
+    A small Go-Explore from state toward any location in ahead, for hops no known chunk makes: an archive of
+    locations, each keeping its richest visit (by keep) or else its first, explored from with sticky random
+    segments, rarely chosen first. Of the first ARRIVALS_TO_COMPARE arrivals, returns the furthest along
+    and then richest, as (state, position on the chain); (None, -1) if none.
+    """
+    archive = {location(emulator.memory(state)): [state, 0]}
+    arrivals = []
+    for _ in range(segments):
+        if len(arrivals) >= ARRIVALS_TO_COMPARE:
+            break
+        places = list(archive)
+        weights = np.array([1 / np.sqrt(1 + archive[p][1]) for p in places])
+        chosen = places[int(rng.choice(len(places), p=weights / weights.sum()))]
+        archive[chosen][1] += 1
+        emulator.load(archive[chosen][0])
+        action = int(rng.integers(len(ACTIONS)))
+        for _ in range(steps):
+            if rng.random() > 0.9:
+                action = int(rng.integers(len(ACTIONS)))
+            emulator.run(ACTIONS[action], FRAMES_PER_STEP)
+            memory = emulator.memory()
+            here = location(memory)
+            if here in ahead:
+                arrivals.append(((ahead[here], keep(memory) if keep else 0), emulator.save()))
+                if len(arrivals) >= ARRIVALS_TO_COMPARE:
+                    break
+                continue
+            if here not in archive:
+                archive[here] = [emulator.save(), 0]
+            elif keep and keep(memory) > keep(emulator.memory(archive[here][0])):
+                archive[here][0] = emulator.save()
+    if not arrivals:
+        return None, -1
+    (index, _), best = max(arrivals, key=lambda arrival: arrival[0])
+    return best, index
+
+
 def travel(emulator, state, graph, targets, rng, keep=None, random_tries=200, random_steps=60, slack=4,
            most_replans=50):
     """
     Carries state to any of targets (locations) across known territory, using save states. Plans the
     shortest chain of locations; for each hop tries the known chunks, then random retries, accepting arrival
-    anywhere further along the chain. A hop that can't be made is banned and the route re-planned.
+    anywhere further along the chain; a hop none of those makes gets a small local exploration (see
+    _local_search). A hop that still can't be made is banned and the route re-planned.
     keep(memory) -> comparable: when given, every candidate is tried and the arrival that gets furthest and
     then scores highest is kept (e.g. holds the most), instead of the first arrival.
     Returns (arrived, last state, steps tried, hops made, the hop it last failed or None).
@@ -119,6 +160,11 @@ def travel(emulator, state, graph, targets, rng, keep=None, random_tries=200, ra
                     best = (rank, arrived, index)
                 if keep is None:
                     break
+        if best is None:
+            # No known chunk or quick try makes this hop: explore it.
+            arrived, index = _local_search(emulator, state, ahead, rng, keep)
+            if arrived:
+                best = (None, arrived, index)
         if best:
             _, state, index = best
             hops += index

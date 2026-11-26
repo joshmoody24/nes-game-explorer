@@ -50,6 +50,7 @@ def main():
           f"({steps} steps tried), holding {m[at(CURRENT_MISSILES)]} missiles, {energy_of(m)} energy, room y {m[ROOM_Y]}",
           flush=True)
     if arrived:
+        Path("cache/carried-to-door.state").write_bytes(state)
         reached = [r for result in workers.map(_opened, [(state, list(range(segments)))]) for r in result]
         print(f"random segments from there entered the room beyond the red door in {np.mean(reached):.1%} "
               f"({sum(reached)} of {len(reached)})")
