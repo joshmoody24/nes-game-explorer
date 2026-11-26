@@ -10,6 +10,7 @@ places) instead of by tries.
 Usage: python -m checks.barrier_carry_check <run name> [barriers] [explore minutes] [--need]
 """
 
+import json
 import os
 import pickle
 import subprocess
@@ -36,13 +37,16 @@ def main():
     run_dir = Path("runs") / run
     if "--need" in sys.argv:
         from checks.need_check import needs
-        rich_state, ranked, _ = needs(emulator, run_dir, at(CURRENT_MISSILES))
+        rich_state, ranked, need = needs(emulator, run_dir, at(CURRENT_MISSILES))
+        print(f"need of the top 8: {[(loc[:3], need[loc]) for loc in ranked[:8]]}", flush=True)
     else:
         rich_state, ranked = barriers.find(emulator, run_dir, missiles_then_energy)
     print(f"{len(ranked)} barriers; richest state holds {missiles_then_energy(emulator.memory(rich_state))}; "
           f"top {count}: {ranked[:count]}", flush=True)
     saved = pickle.loads(zlib.decompress((run_dir / "checkpoint.pkl.z").read_bytes()))
-    start = saved["states"][0]
+    # Paths are relative to the runs start file: the archives first slot may since hold a richer visit.
+    start_file = json.loads((run_dir / "config.json").read_text()).get("start_state")
+    start = Path(start_file).read_bytes() if start_file else saved["states"][0]
     journeys = [(start, p) for p in saved["paths"] if p] + [(s, bytes(a)) for s, a in valid_recordings(run_dir)]
     world = graph.build(journeys)
     # From the nearest state holding more than any visit to the target ever did (fewest planned hops).
@@ -74,7 +78,7 @@ def main():
             (out / f"delivered-{k}.state").write_bytes(state)
             explorations.append(subprocess.Popen(
                 ["python", "go_explore.py", f"{run}-carried/explore-{k}", "--minutes", minutes, "--workers", "3",
-                 "--start-state", str(out / f"delivered-{k}.state"), "--keep-more", "4217", "--stop-at-item", "long"],
+                 "--start-state", str(out / f"delivered-{k}.state"), "--keep-more", "4217", "--stop-at-item", "bombs"],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     for p in explorations:
         p.wait()

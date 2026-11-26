@@ -765,3 +765,10 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   rooms, energy tank). Without the cheat: about a coin flip per 15 min, and ~20 min. Resources are the
   binding constraint at these stages, not skill or places: carrying (paying back the cheat) is the right
   lever, and a free-resource exploration is a fast way to find what opens next and where.
+- **Second door (Bombs)** via need -> carry: a 5-min hoarding layer from the Long Beam (81 rooms) never
+  reached the Bombs door room (0, 5, 25) (found as the room whose visits led straight to Bombs in
+  `layer2-watch`), so all top-60 candidates have need 0 and carrying has no real target. Bug fixed on the
+  way: maps must replay stored paths from the run's start file (Pareto slot reuse can replace the archive's
+  first slot). The wall before Bombs is reaching the room (the lava corridors drain energy); the ceiling run
+  with energy refilled got Bombs in 416 s. Next: the same need/carry loop with energy as the resource, i.e.
+  carry health toward where exploration keeps dying.
