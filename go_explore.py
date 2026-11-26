@@ -44,6 +44,7 @@ class Archive:
     places: list = field(default_factory=list)
     states: list = field(default_factory=list)
     times_chosen: list = field(default_factory=list)
+    familiar: dict = field(default_factory=dict)  # location -> choices earlier runs spent there (--familiar)
     parents: list = field(default_factory=list)  # archive index of the visit whose segment found this one (-1: start)
     # Buttons (indices into ACTIONS) from the start state to the kept state: every visit has a replayable
     # route. None for places resumed from an older run, which didn't keep paths.
@@ -97,7 +98,7 @@ class Archive:
         self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
-        self.times_chosen.append(0)
+        self.times_chosen.append(self.familiar.get(place[:LOCATION_SIZE], 0) if place[0] not in ("record", "climb") else 0)
         self.parents.append(parent)
         self.paths.append(path)
         self.holdings.append(held)
@@ -293,6 +294,7 @@ def parse_arguments():
     parser.add_argument("--workers", type=int, default=18)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
+    parser.add_argument("--familiar", default="", help="runs whose choices count as already spent here: novelty is judged against all earlier experience, not just this run")
     parser.add_argument("--start-state", help="a file holding a save state to explore from, instead of power-on")
     parser.add_argument("--stop-at-item", help="diagnostic: stop once progress shows this item (e.g. \"long beam\")")
     parser.add_argument("--stop-at-gain", action="store_true",
@@ -332,6 +334,20 @@ def prepare_run_dir(args, settings):
     return run_dir
 
 
+LOCATION_SIZE = 5  # a hand-made place starts with (area, map y, map x, block x, block y)
+
+
+def familiar_counts(run_names):
+    """Choices earlier runs spent at each location, so this run's novelty is judged against all earlier experience."""
+    counts = {}
+    for name in filter(None, run_names.split(",")):
+        saved = pickle.loads(zlib.decompress((Path("runs") / name / "checkpoint.pkl.z").read_bytes()))
+        for place, chosen in zip(saved["places"], saved["times_chosen"]):
+            if place[0] not in ("record", "climb"):
+                counts[tuple(place[:LOCATION_SIZE])] = counts.get(tuple(place[:LOCATION_SIZE]), 0) + chosen
+    return counts
+
+
 def main():
     args, settings = parse_arguments()
     run_dir = prepare_run_dir(args, settings)
@@ -346,6 +362,7 @@ def main():
                           guide_weight=settings.guide_weight if settings.guide else 0.0, recency_weight=settings.recency,
                           selection=settings.selection, rng=np.random.default_rng(args.seed),
                           chooser=pickle.loads(Path(settings.chooser_file).read_bytes()) if settings.chooser_file else None)
+        archive.familiar = familiar_counts(args.familiar)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()

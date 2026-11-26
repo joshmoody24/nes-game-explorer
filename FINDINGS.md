@@ -1140,3 +1140,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   row-14 corridor, and the uncheated way in was a bombed hole in the corridor floor at (14,6) x~187 (frames from
   honest1). The blocks regrow, so the way back up is a one-way gap for random play. Scripted probes from the highest
   shaft saves (left/right jumps; shoot up then jump, also only under the hole) got 0 out of ~2,600.
+- **Post-Kraid shaft wall solved by judging novelty against earlier runs (--familiar).** Autopsy chain: the nesmaps
+  Brinstar map shows the shaft top has doors in both walls at corridor height, reached through a stack of blue
+  blocks; the uncheated saves do reach a morph-ball tunnel right under them ($0300 = 3, ball), and random tries from
+  there leave through a door ~0.4% of the time. But ~90% of all saves were back down the elevator in Kraid lair,
+  which a fresh stage archive treats as brand-new, so the tunnel got 37 of 102,487 tries. --familiar runs a,b,...
+  starts each new place times_chosen at the choices those runs spent at its location (area, cell, block). From the
+  shaft top, 3.4 min x 10 workers: familiar left the shaft in 2/3 seeds (13 Brinstar cells outside it each), plain
+  0/3; lair share 71-85% vs 89-92%. Splitting places by pose (--place-bytes 768) alone: no escape.
