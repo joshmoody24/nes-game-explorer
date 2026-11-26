@@ -77,6 +77,9 @@ class Settings:
     # Save-scum on damage: bytes of one number, most significant first (e.g. "263,262"); a try ends, like a
     # death, the moment that number drops, so nothing reached after taking damage is kept.
     no_damage: str = ""
+    # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
+    # you were heading is usually the way on), instead of a random one.
+    momentum: float = 0.0
     generic_places: str = ""  # "room", "position" or "both": parts of location from bytes found by generic_places.py
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
@@ -166,7 +169,7 @@ def guarded_value(memory, indices):
     return tuple(int(memory[i]) for i in indices)
 
 
-def explore(emulator, rng, settings, known, start, start_state, start_path_length):
+def explore(emulator, rng, settings, known, start, start_state, start_path_length, last_action=None):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched
     patterns, died = set(), False
@@ -180,6 +183,8 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
     probabilities = weights / weights.sum()
     action = rng.choice(len(ACTIONS), p=probabilities)
+    if last_action is not None and rng.random() < settings.momentum:
+        action = last_action
     stale = 0
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
@@ -231,10 +236,10 @@ def worker(connection, settings, seed):
     rng = np.random.default_rng([seed, os.getpid()])
     known = {}
     while (task := connection.recv()) is not None:
-        start, start_state, start_path_length, updates = task
+        start, start_state, start_path_length, last_action, updates = task
         for place, visit in updates:
             known.setdefault(place, []).append(visit)
-        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length))
+        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length, last_action))
 
 
 class Explorers:
@@ -249,9 +254,9 @@ class Explorers:
         self._updates_sent = [0] * count
         self.count = count
 
-    def send(self, worker_index, start, start_state, start_path_length, updates):
+    def send(self, worker_index, start, start_state, start_path_length, updates, last_action=None):
         """updates is the main process's full, append-only log of (place, (holdings, path length)) updates."""
-        self._connections[worker_index].send((start, start_state, start_path_length,
+        self._connections[worker_index].send((start, start_state, start_path_length, last_action,
                                               updates[self._updates_sent[worker_index]:]))
         self._updates_sent[worker_index] = len(updates)
 

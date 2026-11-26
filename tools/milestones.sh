@@ -6,7 +6,7 @@ name="$1"; variant="$2"; shift 2
 rm -rf "runs/$name"
 jobs_list=()
 for start in "$@"; do
-  for seed in 0 1 2; do
+  for seed in $(seq 0 $((${SEEDS:-3} - 1))); do
     for kind in plain variant; do
       jobs_list+=("$start $seed $kind")
     done

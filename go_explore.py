@@ -321,7 +321,8 @@ def main():
         # A copy: a row view would keep the whole signals table alive for every logged decision.
         pending_signals[worker_index] = archive.signals()[index].copy()
         start_paths[worker_index] = archive.paths[index]
-        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates)
+        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates,
+                       archive.paths[index][-1] if archive.paths[index] else None)
 
     for worker_index in range(explorers.count):
         assign(worker_index)

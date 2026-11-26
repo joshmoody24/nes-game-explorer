@@ -925,3 +925,11 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Long holds** (`--repeat-probability 0.99 --repeat-spread 0.09`: each try's keep probability drawn from
   0.90-0.99): crossed in 1/3 (to 111/184), with energy hoarding 1/3 (to 119/184); 2/6 vs 0/12 before. Both stall
   next in room (0,7,21). General gap: skills need holds far longer than the explorer's typical ones.
+- **No damage** (`--no-damage 263,262`: a try ends like a death the moment energy drops; Josh: humans save-scum
+  on any damage) from full-energy starts 1000/2000/3000 steps before the tank (energy edited to 14,
+  diagnostic): 0/9 vs plain 0/9. Uninformative: normal holds never cross the room (0,7,17) jump, which comes
+  first.
+- **Momentum** (`--momentum 0.5`: a try starts by continuing the last button into its visit; idea from the
+  second wall, where the furthest visit sits at the exit and tries head back left): with long holds 0/6
+  crossed the first wall (long holds alone: 2/6). Machine was overloaded (~46 workers on 24 cores, 25% fewer
+  choices); not clean, but no sign of help.
