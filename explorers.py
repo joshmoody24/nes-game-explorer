@@ -85,6 +85,11 @@ class Settings:
     # Add a fingerprint of the background tile layout to places, so scenery damage (e.g. a barrier being shot
     # down) counts as progress. Pair with stay: scrolling also changes it.
     place_nametable: bool = False
+    # Keep a save whenever a rarely-changing byte sets a new record low or high in this room (e.g. a boss's hit
+    # points dropping, a hit counter rising), as its own place: progress that rooms and positions can't see. A byte
+    # that has set records both ways in a room is not a progress counter; one counts only from its PROGRESS_RECORDS-th
+    # one-way record on.
+    novel_values: bool = False
     # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
     # you were heading is usually the way on), instead of a random one.
     momentum: float = 0.0
@@ -167,6 +172,8 @@ def beats(a, b):
 RARE_CHANGE_RATE = 0.002  # bytes changing on fewer steps than this count toward change patterns
 WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
+_records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
+PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
 
 
 def refilled(emulator, state, edits):
@@ -184,13 +191,14 @@ def guarded_value(memory, indices):
 
 def explore(emulator, rng, settings, known, start, start_state, start_path_length, last_action=None):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
-    global _change_counts, _steps_watched
+    global _change_counts, _steps_watched, _records
     patterns, died = set(), False
     if settings.refill:
         start_state = refilled(emulator, start_state, settings.refill)
     emulator.load(start_state)
     guarded = [int(b) for b in settings.no_damage.split(",") if b]
     stay = {tuple(int(v) for v in cell.split(",")) for cell in settings.stay.split(";") if cell}
+    rare_values, changed = [], None
     guarded_before = guarded_value(emulator.view(start_state), guarded)
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
@@ -212,13 +220,16 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         full_memory = emulator.memory(state)
         if previous_memory is not None:
             progress.see_change(previous_memory, full_memory)
-            if settings.surprise:
+            if settings.surprise or settings.novel_values:
+                changed_before = changed if changed is not None else np.zeros(len(full_memory), bool)
                 changed = full_memory != previous_memory
                 _change_counts = changed.astype(np.int64) if _change_counts is None else _change_counts + changed
                 _steps_watched += 1
                 if _steps_watched > WARMUP_STEPS:
                     rare = np.flatnonzero(changed & (_change_counts < RARE_CHANGE_RATE * _steps_watched))
                     patterns.update(int(b) * 256 + int(full_memory[b]) for b in rare)
+                    # Only isolated changes: a hit lowers hit points in one jump; moving things change step after step.
+                    rare_values = [(int(b), int(full_memory[b])) for b in rare if not changed_before[b]]
         previous_memory = full_memory
         if (memory[GAME_MODE] == GAME_OVER or (guarded and guarded_value(memory, guarded) < guarded_before)
                 or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay)):
@@ -240,6 +251,19 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             stale += 1
             if settings.stale_steps is not None and stale >= settings.stale_steps:
                 break
+        if settings.novel_values:
+            room = (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]))
+            for b, value in rare_values:
+                low, high, went_down, went_up, count = _records.get((room, b), (value, value, False, False, 0))
+                record = value < low or value > high
+                went_down, went_up = went_down or value < low, went_up or value > high
+                count += record
+                if record and not (went_down and went_up) and count >= PROGRESS_RECORDS:
+                    value_place = ("record", room, b, value)
+                    if value_place not in known and value_place not in found:
+                        found[value_place] = (state, length, held)
+                _records[(room, b)] = (min(low, value), max(high, value), went_down, went_up, count)
+            rare_values = []
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),

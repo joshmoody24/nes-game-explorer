@@ -1036,3 +1036,12 @@ the state-level danger prediction to choose which states to keep and explore fro
   (scenery fingerprint in place + focus), the escape (an elevator random play never stands on long enough).
   General lesson: **every wall after Bombs was "progress the place can't see"** (HP, scenery, object state) or
   "effort spread too thin" (frontier/focus). Next: make both automatic and drop the cheats.
+- **General replacement for "boss HP in the place": record places** (`--novel-values`). A save becomes a place
+  ("record", room, byte, value) when a rarely-changing byte (changes on < 0.2% of steps) sets a new record low or
+  high in this room, with three filters found by autopsy on Kraid (3-min runs from his room, refills on, no hint):
+  every new value -> 25K places, Kraid HP 66; records only -> 12K places, 73 (2,171 bytes set a median of 4 records,
+  Kraid's HP 33, all downward); one-way only (bytes with records both ways stop) -> 12K, 68; >= 6 one-way records ->
+  1.5K from 49 bytes, 52 (projectile positions dominated: table at $05x7); isolated changes only (not changed the
+  step before; a hit is one jump, motion is consecutive) -> 209 from 34, 71 (gate too strict now); gate 3 -> 849 from
+  139 bytes, **Kraid's HP the top record byte, Kraid to 27**; resumed 3 min (resume now keeps record places) ->
+  **Kraid beaten** (1 save), no hand-picked byte.

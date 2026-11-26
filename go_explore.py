@@ -214,9 +214,12 @@ def resumed_archive(run_name, settings, emulator):
     """An earlier run's saved states, re-sorted into places under the current settings."""
     saved = pickle.loads(zlib.decompress((RUNS / run_name / "checkpoint.pkl.z").read_bytes()))
     archive = Archive()
-    for state in saved["states"]:
+    # Keeps a visit's stored place when it isn't a hand-made one (e.g. a record place, see Settings.novel_values).
+    places = saved.get("places") or [None] * len(saved["states"])
+    for state, place in zip(saved["states"], places):
         memory = emulator.view(state)
-        archive.offer(hand_made_place(memory, settings), state, holdings(memory, settings))
+        archive.offer(place if place is not None and place[0] == "record" else hand_made_place(memory, settings),
+                      state, holdings(memory, settings))
     return archive
 
 
