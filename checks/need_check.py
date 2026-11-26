@@ -41,12 +41,12 @@ def _new_reached(task):
     return hits
 
 
-def main():
-    run, byte = sys.argv[1], int(sys.argv[2])
-    candidates = int(sys.argv[3]) if len(sys.argv) > 3 else 60
-    probes = int(sys.argv[4]) if len(sys.argv) > 4 else 300
-    emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    saved = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))
+def needs(emulator, run_dir, byte, candidates=60, probes=300):
+    """
+    (richest visit's state, candidate dead-end locations ranked by need, need per location). Need: extra probes
+    reaching locations the archive never saw when the visit there holds the richest amount of byte.
+    """
+    saved = pickle.loads(zlib.decompress((Path(run_dir) / "checkpoint.pkl.z").read_bytes()))
     views = [emulator.view(s) for s in saved["states"]]
     locs = [location(v) for v in views]
     known = frozenset(locs)
@@ -60,6 +60,7 @@ def main():
         if p >= 0:
             children.add(locs[p])
     rich = max(held.values())
+    richest = max(range(len(views)), key=lambda i: int(views[i][byte]))
     dead = sorted((loc for loc in held if loc not in children and held[loc] < rich),
                   key=lambda loc: -(rich - held[loc]) * tried[loc])[:candidates]
     offset = emulator.state_offsets([byte])[0]
@@ -71,9 +72,17 @@ def main():
         tasks += [(state, known, probes), (bytes(edited), known, probes)]
     results = list(workers.map(_new_reached, tasks))
     need = {loc: results[2 * k + 1] - results[2 * k] for k, loc in enumerate(dead)}
-    ranked = sorted(dead, key=lambda loc: -need[loc])
+    return saved["states"][richest], sorted(dead, key=lambda loc: -need[loc]), need
+
+
+def main():
+    run, byte = sys.argv[1], int(sys.argv[2])
+    candidates = int(sys.argv[3]) if len(sys.argv) > 3 else 60
+    probes = int(sys.argv[4]) if len(sys.argv) > 4 else 300
+    emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
+    _, ranked, need = needs(emulator, Path("runs") / run, byte, candidates, probes)
     door = [k for k, loc in enumerate(ranked) if loc[:3] == (0, 5, 8)]
-    print(f"{len(dead)} candidates x {probes} probes each way; door-room ranks {door[:4]} "
+    print(f"{len(ranked)} candidates x {probes} probes each way; door-room ranks {door[:4]} "
           f"(need {[need[ranked[k]] for k in door[:4]]}); top 6: {[(loc[:3], need[loc]) for loc in ranked[:6]]}")
 
 

@@ -742,3 +742,10 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   #1, #2 and #3**, the only candidates with need > 0 (3, 1, 1). Sharp where tries, shortfall, death rates and
   reactions all failed. General: it edits only the automatically detected byte and asks where having more
   of it opens new territory (in Zelda: bombable walls, locked doors).
+- **End to end with no hand-picked target** (`python -m checks.barrier_carry_check layer-keep-15min 3 2
+  --need`, 4.5 min): need ranking -> top 3 are the door spots; carrying from the *nearest richer* state
+  (fewest planned hops among visits holding more than the target ever had; carrying from the far richest
+  state failed after 8 hops) delivered 5/4/4 missiles to all three; **exploration from each got the Long
+  Beam in 64, 2 and 38 s**. On an archive that never got the Long Beam by itself in 15 min.
+  Loop: explore with hoarding -> need-rank dead ends (counterfactual probes) -> carry from the nearest richer
+  state -> explore.

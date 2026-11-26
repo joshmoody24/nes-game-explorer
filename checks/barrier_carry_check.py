@@ -4,7 +4,10 @@ richest state to each of the top few (graph.travel_many, keeping riches), then e
 delivered state and report what each found. Hoards missiles (the detector's top spendable); judging the
 outcome uses Metroid knowledge: diagnostic only.
 
-Usage: python -m checks.barrier_carry_check <run name> [barriers] [explore minutes]
+With --need, barriers are ranked by need (checks.need_check: where holding more of the spendable reaches new
+places) instead of by tries.
+
+Usage: python -m checks.barrier_carry_check <run name> [barriers] [explore minutes] [--need]
 """
 
 import os
@@ -28,17 +31,38 @@ def missiles_then_energy(memory):
 
 def main():
     run, count = sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 5
-    minutes = sys.argv[3] if len(sys.argv) > 3 else "2"
+    minutes = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith("--") else "2"
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     run_dir = Path("runs") / run
-    rich_state, ranked = barriers.find(emulator, run_dir, missiles_then_energy)
+    if "--need" in sys.argv:
+        from checks.need_check import needs
+        rich_state, ranked, _ = needs(emulator, run_dir, at(CURRENT_MISSILES))
+    else:
+        rich_state, ranked = barriers.find(emulator, run_dir, missiles_then_energy)
     print(f"{len(ranked)} barriers; richest state holds {missiles_then_energy(emulator.memory(rich_state))}; "
           f"top {count}: {ranked[:count]}", flush=True)
     saved = pickle.loads(zlib.decompress((run_dir / "checkpoint.pkl.z").read_bytes()))
     start = saved["states"][0]
     journeys = [(start, p) for p in saved["paths"] if p] + [(s, bytes(a)) for s, a in valid_recordings(run_dir)]
     world = graph.build(journeys)
-    results = graph.travel_many([rich_state] * count, world, [{target} for target in ranked[:count]],
+    # From the nearest state holding more than any visit to the target ever did (fewest planned hops).
+    held_at = {}
+    for st in saved["states"]:
+        m = emulator.memory(st)
+        held_at[graph.location(m)] = max(held_at.get(graph.location(m), -1), missiles_then_energy(m)[0])
+    sources = []
+    for target in ranked[:count]:
+        richer = {}
+        for st in saved["states"]:
+            m = emulator.memory(st)
+            if missiles_then_energy(m)[0] > held_at.get(target, -1):
+                richer.setdefault(graph.location(m), st)
+        chains = [(len(chain), richer[loc]) for loc in richer
+                  for chain in [graph.plan(world, loc, {target})] if chain]
+        sources.append(min(chains, key=lambda c: c[0])[1] if chains else rich_state)
+        print(f"  barrier {target}: carrying from {missiles_then_energy(emulator.memory(sources[-1]))}, "
+              f"{min(chains)[0] - 1 if chains else -1} hops away", flush=True)
+    results = graph.travel_many(sources, world, [{target} for target in ranked[:count]],
                                 keep=missiles_then_energy)
     out = Path("runs") / f"{run}-carried"
     out.mkdir(exist_ok=True)
