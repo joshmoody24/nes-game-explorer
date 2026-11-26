@@ -933,3 +933,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   second wall, where the furthest visit sits at the exit and tries head back left): with long holds 0/6
   crossed the first wall (long holds alone: 2/6). Machine was overloaded (~46 workers on 24 cores, 25% fewer
   choices); not clean, but no sign of help.
+- **Long holds, fair race** (`PARALLEL=2 SEEDS=6 tools/milestones.sh holds "--repeat-probability 0.99
+  --repeat-spread 0.09" cache/near-layer2-watch-tank-1000.state`, autopsy for route progress): plain 0/6 past
+  route point 31; long holds 2/6 (both to 119/184). All runs tonight: 4/12 vs 0/18. Every crosser stops at 119,
+  the exit of room (0,7,21).
+- Climb with carry (`climb.py climb-carry --layer0 climb2/layer0 --carry 2`): layers 1-4 from layer 0 events, no
+  new acquisitions; first carry step found need 0 at its targets (carried anyway: fixed, carry now skips them).
