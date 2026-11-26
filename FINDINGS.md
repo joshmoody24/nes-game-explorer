@@ -727,3 +727,11 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   | shortfall, then tries | 75 | 69 |
   No single ranking puts the door near the top in both; a portfolio would need the top 30-40. Paused here:
   open question is a sharper general "where are resources needed?" signal.
+- **Carrying inside exploration, sampled targets** (offline): the door room gets only 1.2-1.9% of the
+  sampling weight (by tries or shortfall x tries) -> ~120-200 carries for a 90% chance of one door target;
+  no better than hoarding + luck. Not built.
+- **"Watch the barrier as it fails"** (`python -m checks.reaction_check layer-keep-45min`, 7 s): reactions =
+  steps where a rarely-changing byte takes a value unseen earlier in the data, counted per location: 1,331
+  reactions at 287 locations; **door room ranks 115**. First visits to any room produce new values everywhere,
+  and door hits are rare in sampled recordings. Not a sharp signal either.
+  Open problem: a general signal for *where a resource is needed*.
