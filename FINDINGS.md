@@ -1045,3 +1045,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   step before; a hit is one jump, motion is consecutive) -> 209 from 34, 71 (gate too strict now); gate 3 -> 849 from
   139 bytes, **Kraid's HP the top record byte, Kraid to 27**; resumed 3 min (resume now keeps record places) ->
   **Kraid beaten** (1 save), no hand-picked byte.
+- Record places replace every hand-made progress hint: **Ridley beaten in 3 min** (start-ridley, refills, no hint);
+  **Zebetites + Mother Brain**: from (11,4) with `--stay` and no nametable/MB bytes, through to her room in 3 min,
+  resumed 3 min: hits to 28, statuses dying/gone/**time bomb set** (and 7 = bomb exploded: escapes not yet
+  survived). Remaining crutches: refills/edited items/tanks/boss flags, `--stay` focus, manual frontier restarts,
+  and the game-end elevator.
