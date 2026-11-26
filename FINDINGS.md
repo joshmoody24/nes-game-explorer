@@ -1130,3 +1130,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   workers, still x blocks 1-6 of (14,6) only, never the door edges. Screens of the highest/leftmost/rightmost saves:
   walls both sides, small platforms, a ceiling of blue blocks, no door visible. Open: whether the doors are on a part
   of the room these saves never scroll to, or the way up is through the ceiling (bombs).
+- Frames from a save beside the shaft top's left wall (holding left + fire): a solid pillar, no door; the view is
+  scrolled ~121 px into the top room and Samus slides down to (16,6). (13,6) has no room, so the exit isn't up through
+  the ceiling: the side doors of (14,6) are above anything these saves see. The climb to the very top of the shaft is
+  the wall (`--climb-records` extremes are measured in screen coordinates, which scroll, so they don't capture it).
