@@ -91,7 +91,7 @@ class Archive:
             self.updates.append((place, visit))
             self.last_slot = slot
             return "better"
-        self.place_numbers.setdefault(place, len(self.place_numbers))
+        self.place_numbers.setdefault(choice_group(place), len(self.place_numbers))
         self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
@@ -137,7 +137,7 @@ class Archive:
 
     def weights(self):
         active = np.array(self.active)
-        place_of = np.array([self.place_numbers[p] for p in self.places]) if len(self.place_numbers) else None
+        place_of = np.array([self.place_numbers[choice_group(p)] for p in self.places]) if len(self.place_numbers) else None
         visits_per_place = np.bincount(place_of, weights=active)
         chosen = np.array(self.times_chosen)
         weights = active / np.sqrt(1 + chosen) / np.maximum(visits_per_place[place_of], 1)
@@ -176,6 +176,12 @@ def guide_route(path):
     """{location: progress 0-1} along a guide route (see explorers.Settings.guide)."""
     locations = pickle.loads(Path(path).read_bytes())
     return {tuple(loc): (k + 1) / len(locations) for k, loc in enumerate(locations)}
+
+
+def choice_group(place):
+    """What choose() splits weight over: a room's record places (Settings.novel_values) count as one place, so
+    progress inside a fight is explored without crowding out the map."""
+    return place[:2] if place[0] == "record" else place
 
 
 def place_location(place):

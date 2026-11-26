@@ -1093,3 +1093,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   tries from (23,4), (23,7), (23,12): 0/3000) nor west from (27,3) to (27,2) (0/2000; room 0x1A: blue door left,
   red right; screenshots show (27,3) is a vertical two-screen shaft with a solid left wall where Samus lands). No High
   Jump or Ice Beam in these honest saves. Open: the honest route out of Kraid's lair.
+- Why the post-Kraid run is stuck: from `honest1` saves the climb (23,7)->(22,7) works 85% (from one save) and
+  (27,3)->(27,2) ~4%, i.e. the route exists; `honest3` had only 28 saves in (23,7), all on its right side, and from
+  them 0%. The shaft is deadly (60-90% of 300-step tries die). Record places took 58-63% of all choices (`honest1`:
+  30.8K of 56.9K places; `honest3`: 13.3K of 42.5K): `choice_group` now counts a room's record places as one place
+  when choosing. 10-min check matched `honest3`'s pace (11 rooms at 10 min both); room count was still climbing at
+  30 min (11 -> 27 -> 52).
