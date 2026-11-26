@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-# Runs a command under a hard memory cap, so a runaway experiment gets killed instead of the machine
-# running out of memory. Usage: tools/capped <limit, e.g. 16G> <command> [args...]
+# Runs a command under a hard memory cap, so a runaway experiment gets killed instead of the machine running out of
+# memory, and under a wall-clock cap of 3 minutes, because long runs are usually waste when a seconds-long probe from
+# a saved state would answer the question. A longer run needs LONG="why this can't be a short probe" (optionally
+# LONG_MINUTES, default 30); each one is logged to runs/long-runs.log.
+# Usage: [LONG="reason" [LONG_MINUTES=N]] tools/capped <memory limit, e.g. 16G> <command> [args...]
 set -euo pipefail
 limit="$1"
 shift
-exec systemd-run --user --scope --quiet -p MemoryMax="$limit" -p MemorySwapMax=0 "$@"
+seconds=180
+if [ -n "${LONG:-}" ]; then
+  seconds=$(( ${LONG_MINUTES:-30} * 60 ))
+  mkdir -p runs
+  echo "$(date -Is) ${LONG_MINUTES:-30} min: ${LONG} :: $*" >> runs/long-runs.log
+fi
+exec systemd-run --user --scope --quiet -p MemoryMax="$limit" -p MemorySwapMax=0 -p RuntimeMaxSec="$seconds" "$@"
