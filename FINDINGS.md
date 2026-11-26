@@ -1074,3 +1074,6 @@ the state-level danger prediction to choose which states to keep and explore fro
   with Samus at 0 energy and 0 missiles in every lowest save: the fight spends everything (first save to reach each
   record kept, however much it spent). **Records now keep the richest save per level** (a save matching the record is
   offered under the same place, so the keep rule swaps in one holding more): Kraid to 34.
+- **Honest Kraid kill**: from a realistic best arrival (2 full tanks = 299 energy, 15/15 missiles, set once, no
+  refills; the uncheated run had 2 tanks and capacity 15 by then), record places beat Kraid within 12 min (22
+  workers; 609 saves after the kill). The fight is solved; the gap is arriving full (honest arrivals: ~13 energy).
