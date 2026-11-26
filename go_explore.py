@@ -288,7 +288,8 @@ def main():
 
     def assign(worker_index):
         index = archive.choose(rng)
-        pending_signals[worker_index] = archive.signals()[index]
+        # A copy: a row view would keep the whole signals table alive for every logged decision.
+        pending_signals[worker_index] = archive.signals()[index].copy()
         start_paths[worker_index] = archive.paths[index]
         explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates)
 
