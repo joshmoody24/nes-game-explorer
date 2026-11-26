@@ -958,3 +958,21 @@ the state-level danger prediction to choose which states to keep and explore fro
   catches 19/23 but explorer speed drops 57K -> 4K frames/s. Retiring visits whose tries all die: the lava keeps
   supplying new doomed visits for the same places (87-95% of stored saves doomed, 3-7K places), 0/4. All removed.
   Lesson: stop hill-climbing one optional wall at a ~25% base rate with n=4.
+- **Reference chain** (`chain.py`: cheat refills + long holds, stop at each acquisition, continue from the holder):
+  step 0 from the Bombs save got the **Ice Beam in 20 s**, then step 1 found nothing in 12 min, 8 rooms
+  (342 places, 750K segments, 169 productive). Autopsy: 0/8000 tries from the 8 pocket rooms left them, while
+  saves from past runs in the same shaft leave 70-86% of the time. Refill edit and Ice Beam bit don't matter
+  (swap tests). Delta-debugging the 1,836 differing bytes found **one byte, 0x49 (scroll direction): 0x00 in the
+  trapped saves, 0x01 frees them (43/96)**. The chain reached the Ice Beam through a glitch (wrong scroll mode in a
+  vertical shaft); the resulting saves are dead ends. (A side scare: 0x74 reads 0x00 vs 0x10 at the same map
+  position, but every 0x00 position also occurs as 0x10, i.e. both are Brinstar as noted; my odd-looking pair was a
+  mid-door-transition save.) Fix: pick the continuation save by reachability (quick tries; most distinct places).
+- **Reference chain** (`chain.py`: cheat refills + long holds, stop at each acquisition, continue from the holder):
+  step 0 from the Bombs save got the **Ice Beam in 20 s**, then step 1 found nothing in 12 min, 8 rooms
+  (342 places, 750K segments, 169 productive). Autopsy: 0/8000 tries from the 8 pocket rooms left them, while
+  saves from past runs in the same shaft leave 70-86% of the time. Refill edit and Ice Beam bit don't matter
+  (swap tests). Delta-debugging the 1,836 differing bytes found **one byte, 0x49 (scroll direction): 0x00 in the
+  trapped saves, 0x01 frees them (43/96)**. The chain reached the Ice Beam through a glitch (wrong scroll mode in a
+  vertical shaft); the resulting saves are dead ends. (A side scare: 0x74 reads 0x00 vs 0x10 at the same map
+  position, but every 0x00 position also occurs as 0x10, i.e. both are Brinstar as noted; my odd-looking pair was a
+  mid-door-transition save.) Fix: pick the continuation save by reachability (quick tries; most distinct places).
