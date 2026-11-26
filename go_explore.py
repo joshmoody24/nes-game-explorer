@@ -61,6 +61,7 @@ class Archive:
     chooser_weight: float = 0.0  # see explorers.Settings.learned_chooser
     chooser: tuple = None  # (weights, bias, means, scales) of the learned chooser, once fit
     cached_weights: tuple = None  # (archive size, choice probabilities, uses) reused by choose
+    recency_weight: float = 0.0  # see explorers.Settings.recency
     progress: list = field(default_factory=list)  # how far along the guide route each visit is (0-1)
     # The locations each visit's lineage passed through, snapshotted when the visit was kept (parent links
     # can loop after slot reuse; these can't). Kept only when exploring with a refill (to pay back cheats).
@@ -156,6 +157,8 @@ class Archive:
         if self.danger_weight and self.dangers:
             danger = np.array(self.dangers)
             weights = weights / (1 + self.danger_weight * danger / max(float(np.median(danger)), 1e-6))
+        if self.recency_weight:
+            weights = weights * (1 + self.recency_weight * (np.arange(len(weights)) / max(len(weights) - 1, 1)) ** 4)
         if self.holdings_weight and self.holdings and len(self.holdings[0]):
             held = np.array(self.holdings, dtype=float).sum(1)
             weights = weights * (1 + self.holdings_weight * held / max(held.max(), 1e-9))
@@ -314,7 +317,7 @@ def main():
         archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings,
                           danger_weight=settings.avoid_danger if settings.danger_model else 0.0,
                           mastery_weight=settings.mastery, chooser_weight=settings.learned_chooser,
-                          guide_weight=settings.guide_weight if settings.guide else 0.0,
+                          guide_weight=settings.guide_weight if settings.guide else 0.0, recency_weight=settings.recency,
                           chooser=pickle.loads(Path(settings.chooser_file).read_bytes()) if settings.chooser_file else None)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")

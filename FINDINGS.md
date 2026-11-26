@@ -1050,3 +1050,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   resumed 3 min: hits to 28, statuses dying/gone/**time bomb set** (and 7 = bomb exploded: escapes not yet
   survived). Remaining crutches: refills/edited items/tanks/boss flags, `--stay` focus, manual frontier restarts,
   and the game-end elevator.
+- **Focus without hints** (from the Tourian entrance, refills on, record places, no stay; 10 workers x 3.4 min):
+  recency 0 -> 21 Tourian cells, through the Metroids (no enemy-slot hint) to (11,5); recency 100 (`--recency`,
+  newest places weighted up) -> 5 Tourian cells, 201 rooms overall: "newest" includes Brinstar's corners. Recency
+  off; record places carry most of the focus.
