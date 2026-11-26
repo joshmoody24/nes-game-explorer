@@ -1059,3 +1059,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   13, Ridley's area 40; 287 rooms, 284 map cells; **reached Kraid's room by itself** but no boss beaten. Autopsy:
   the 73 saves in Kraid's room hold energy 0-8 (mostly 3) and 0-4 missiles; Kraid's HP only to 85. The cheats had
   hidden this: **Samus arrives starving**. Energy isn't hoarded (the detector misses the split decimal bytes).
+- Resumed with energy hoarded too (`honest2`, `--keep-more 4217,263`, 30 min): archive 176K places (two hoarded
+  resources multiply place versions); arrivals at Kraid slightly richer (16 saves at 13 energy, 31 with 5 missiles)
+  but Kraid still at 85. The one 83-energy arrival is doomed (0 energy within 10 steps): hoarding keeps it because
+  the number looks good at that instant. Honest state: the method reaches Kraid with ~13 energy and <= 5 missiles.
+  Next: arrive richer (farm drops / carry riches to where they're needed) and keep doomed saves out.
