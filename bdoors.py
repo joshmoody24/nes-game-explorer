@@ -12,10 +12,11 @@ def find_table(lo, hi, x, base, run=40):
                 best = (ok, t)
                 if ok == run: break
     return best
-ok, t = find_table(0x4010, 0x8010, 0x3FF0, 0x0000)
-print("Brinstar room table", hex(t), ok, "/ 40 parse")
-for cell in ((14, 5), (14, 6), (14, 7), (13, 6), (15, 6)):
-    n = int(grid[cell])
-    if n == 0xFF: print(cell, "no room"); continue
-    room = parse(room_offset(t, 0x3FF0, n, 0x0000))
-    print(cell, f"room {n:#x}:", "doors", [("right" if d >> 4 == 0xA else "left", kinds.get(d & 0xF, d & 0xF)) for d in room[1]] if room else "unparsed")
+if __name__ == "__main__":
+    ok, t = find_table(0x4010, 0x8010, 0x3FF0, 0x0000)
+    print("Brinstar room table", hex(t), ok, "/ 40 parse")
+    for cell in ((14, 5), (14, 6), (14, 7), (13, 6), (15, 6)):
+        n = int(grid[cell])
+        if n == 0xFF: print(cell, "no room"); continue
+        room = parse(room_offset(t, 0x3FF0, n, 0x0000))
+        print(cell, f"room {n:#x}:", "doors", [("right" if d >> 4 == 0xA else "left", kinds.get(d & 0xF, d & 0xF)) for d in room[1]] if room else "unparsed")

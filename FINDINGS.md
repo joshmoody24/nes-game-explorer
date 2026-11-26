@@ -1124,3 +1124,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   it to (14,7)/(14,8): the "climb back the way you came" picture was wrong; the shaft region's exit is unknown.
   `--climb-records` (new highest point per room in 8-px steps, as its own place): 1,218 climb places in 3.4 min from
   the shaft top, same 8 Brinstar cells as without it (no help; option left in).
+- Shaft region doors (Brinstar table 0x6324): Kraid elevator room (18,7) has only a left door into the shaft (18,6);
+  (15-17,6) and (19,6) have none; only the top room (14,6) has doors (left to (14,5), right to (14,7)). Extremes
+  in any direction as progress (`--climb-records` now: new furthest x or y step per room): 36,853 saves in 3.4 min x 20
+  workers, still x blocks 1-6 of (14,6) only, never the door edges. Screens of the highest/leftmost/rightmost saves:
+  walls both sides, small platforms, a ceiling of blue blocks, no door visible. Open: whether the doors are on a part
+  of the room these saves never scroll to, or the way up is through the ceiling (bombs).
