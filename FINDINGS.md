@@ -1119,3 +1119,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   top of the shaft reach neither door (0/1200); holding left+fire slides back down to (16,6). The Norfair elevator is
   at (12,22) (replayed from `honest1`'s shortest path into Norfair). Same shape as earlier walls: easy to fall, hard
   to climb back.
+- Correction: `honest1`'s shortest route to Kraid's room passes (14,8) -> (14,7) and rides the elevator down; it never
+  uses the x=6 shaft. The post-Kraid stages arrive back up into that shaft (by the Kraid elevator) and never get from
+  it to (14,7)/(14,8): the "climb back the way you came" picture was wrong; the shaft region's exit is unknown.
+  `--climb-records` (new highest point per room in 8-px steps, as its own place): 1,218 climb places in 3.4 min from
+  the shaft top, same 8 Brinstar cells as without it (no help; option left in).

@@ -201,7 +201,7 @@ def guide_route(path):
 def choice_group(place):
     """What choose() splits weight over: a room's record places (Settings.novel_values) count as one place, so
     progress inside a fight is explored without crowding out the map."""
-    return place[:2] if place[0] == "record" else place
+    return place[:2] if place[0] in ("record", "climb") else place
 
 
 def place_location(place):

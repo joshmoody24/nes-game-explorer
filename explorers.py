@@ -97,6 +97,9 @@ class Settings:
     # try finds something new from its own record, starting from the archive's overall rate; "thompson-room" starts
     # it from its room's rate instead (which itself starts from the archive's), so mined-out rooms fade.
     selection: str = "classic"
+    # Keep a save whenever the player reaches a new highest point in a room (8-pixel steps), as its own place:
+    # climbing back up is progress that coarse position blocks miss.
+    climb_records: bool = False
     # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
     # you were heading is usually the way on), instead of a random one.
     momentum: float = 0.0
@@ -180,6 +183,8 @@ RARE_CHANGE_RATE = 0.002  # bytes changing on fewer steps than this count toward
 WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
 _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
+_highest = {}  # per worker process: room -> smallest height step reached (screen y grows downward)
+CLIMB_STEP = 8  # pixels per height step for Settings.climb_records
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
 
 
@@ -275,6 +280,14 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                         found[value_place] = (state, length, held)
                 _records[(room, b)] = (min(low, value), max(high, value), went_down, went_up, count)
             rare_values = []
+        if settings.climb_records:
+            room = (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]))
+            height = int(memory[ROOM_Y]) // CLIMB_STEP
+            if height < _highest.get(room, height + 1):
+                _highest[room] = height
+                climb_place = ("climb", room, height)
+                if climb_place not in known and climb_place not in found:
+                    found[climb_place] = (state, length, held)
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),
