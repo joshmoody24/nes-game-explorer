@@ -8,6 +8,7 @@ Usage: python go_explore.py <run name> [--minutes M] [--workers N] [settings fla
 """
 
 import argparse
+import functools
 import dataclasses
 import json
 import os
@@ -59,6 +60,11 @@ class Archive:
     mastery_weight: float = 0.0
     chooser_weight: float = 0.0  # see explorers.Settings.learned_chooser
     chooser: tuple = None  # (weights, bias, means, scales) of the learned chooser, once fit
+    progress: list = field(default_factory=list)  # how far along the guide route each visit is (0-1)
+    # The locations each visit's lineage passed through, snapshotted when the visit was kept (parent links
+    # can loop after slot reuse; these can't). Kept only when exploring with a refill (to pay back cheats).
+    routes: list = field(default_factory=list)
+    guide_weight: float = 0.0
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
@@ -128,6 +134,9 @@ class Archive:
             logit = ((self.signals() - means) / scales) @ w + b
             logit = (logit - logit.mean()) / (logit.std() + 1e-9)
             weights = weights * np.exp(np.clip(self.chooser_weight * logit, -20, 20))
+        if self.guide_weight and self.progress:
+            progress = np.array(self.progress + [0.0] * (len(weights) - len(self.progress)))
+            weights = weights * (1 + self.guide_weight * progress)
         if self.mastery_weight:
             p = (np.array(self.productive) + 0.5) / (chosen + 1)
             weights = weights * (1 + self.mastery_weight * 4 * np.clip(p, 0, 1) * (1 - np.clip(p, 0, 1)))
@@ -144,6 +153,18 @@ class Archive:
 
 CHOOSER_REFIT_EVERY, CHOOSER_WINDOW = 2000, 50000
 CHOOSER_LAG = 5000  # decisions a "later" label waits for its lineage to grow
+
+
+@functools.lru_cache(maxsize=1)
+def guide_route(path):
+    """{location: progress 0-1} along a guide route (see explorers.Settings.guide)."""
+    locations = pickle.loads(Path(path).read_bytes())
+    return {tuple(loc): (k + 1) / len(locations) for k, loc in enumerate(locations)}
+
+
+def place_location(place):
+    """The location part of a hand-made place (area, room, position), as in graph.location."""
+    return tuple(place[:5])
 
 
 def lineage_sizes(parents):
@@ -274,7 +295,8 @@ def main():
     else:
         archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings,
                           danger_weight=settings.avoid_danger if settings.danger_model else 0.0,
-                          mastery_weight=settings.mastery, chooser_weight=settings.learned_chooser)
+                          mastery_weight=settings.mastery, chooser_weight=settings.learned_chooser,
+                          guide_weight=settings.guide_weight if settings.guide else 0.0)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()
@@ -319,6 +341,13 @@ def main():
                                                   None if start_path is None else start_path + segment.actions[:length - len(start_path)]))
                     if outcomes[-1]:
                         created.append(archive.last_slot)
+                        if settings.refill:
+                            while len(archive.routes) < len(archive.states):
+                                archive.routes.append(())
+                            here = place_location(place)
+                            parent_route = archive.routes[segment.start] if segment.start < len(archive.routes) else ()
+                            archive.routes[archive.last_slot] = (parent_route if parent_route[-1:] == (here,)
+                                                                 else parent_route + (here,))
                 new_places = outcomes.count("new")
                 if settings.danger_model:
                     while len(archive.dangers) < len(archive.states):
@@ -332,6 +361,14 @@ def main():
                 archive.productive[segment.start] += new_places > 0
                 decisions["signals"].append(pending_signals[worker_index])
                 decisions["found"].append(new_places > 0)
+                if settings.guide:
+                    route = guide_route(settings.guide)
+                    while len(archive.progress) < len(archive.states):
+                        archive.progress.append(0.0)
+                    for slot in created:
+                        here = place_location(archive.places[slot])
+                        if here in route:
+                            archive.progress[slot] = max(archive.progress[slot], route[here])
                 decisions["visit"].append(segment.start)
                 decisions["created"].append(created)
                 if len(decisions["found"]) % CHOOSER_REFIT_EVERY == 0:
