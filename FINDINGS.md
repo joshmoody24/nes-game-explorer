@@ -671,3 +671,9 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
 - **Choose like a hoarder** (`--favor-holdings W`: selection weight x (1 + W x holdings / max holdings)),
   6 seeds x 2 workers x 3 min each side: base reached the door 6/6 but kept all 4 missiles in 1/6; favor
   (W=10) reached it 4/6 and kept all 4 missiles in **3/6**. Arrives armed far more often, spreads a bit slower.
+- Armed near-door start (`cache/start-near-door-armed.state`: room 7,12, 10 missiles, 2 energy), 6 seeds x
+  2 workers x 3 min each side: Long Beam 0/6 base, 0/6 favor. Door visits / armed / armed high up per seed:
+  base 0/0/0, 32/18/0, 31/0/0, 42/0/0, 44/0/0, 32/32/0; favor 6/0/0, 0/0/0, 25/23/0, 0/0/0, 0/0/0, 32/16/0.
+  **No armed visit ever got high in the door room**, and the door only opens from up high (all 11 earlier
+  successes came from room y 52-87). The chain is: arrive armed (favor helps) -> climb high while armed
+  (now the failing link) -> 5 hits (~1-2% per try).
