@@ -735,3 +735,10 @@ branch per spendable side by side; each new event (events.py) seeds a child laye
   reactions at 287 locations; **door room ranks 115**. First visits to any room produce new values everywhere,
   and door hits are rare in sampled recordings. Not a sharp signal either.
   Open problem: a general signal for *where a resource is needed*.
+- **Need = the counterfactual "does holding more let me get somewhere new here?"** (`python -m
+  checks.need_check layer-keep-15min 4217 60 300`, **24 s**): for the top 60 poor dead ends (shortfall x
+  tries), 300 random probes from a visit as found vs the same visit with the detected spendable edited up to
+  the richest amount; need = extra probes reaching locations the archive never saw. **The door room ranks
+  #1, #2 and #3**, the only candidates with need > 0 (3, 1, 1). Sharp where tries, shortfall, death rates and
+  reactions all failed. General: it edits only the automatically detected byte and asks where having more
+  of it opens new territory (in Zelda: bombable walls, locked doors).
