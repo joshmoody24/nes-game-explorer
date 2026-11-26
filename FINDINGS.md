@@ -837,3 +837,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   Trained on long-range outcomes, the learner discovers that holding resources matters (11x the weight),
   without being told; trained on immediate outcomes it learns pure curiosity. Short-horizon power measures
   failed because they asked the immediate question.
+- **Chooser race** (from the first missiles, missile hoarding, 2 seeds x 4 workers x 10 min): base 28/39 rooms,
+  immediate chooser 72/35, downstream chooser 51/37; no Long Beam in any (budget too small for that door).
+- **Multi-horizon, offline** (`python -m checks.horizons_check downstream/s0 downstream/s1`): held-out AUC for
+  long-range success: immediate chooser 0.690, downstream 0.751, sum 0.729, learned mix 0.739. Combining
+  horizons adds nothing; the long-range label is what matters.
