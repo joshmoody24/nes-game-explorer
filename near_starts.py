@@ -1,6 +1,6 @@
 """
 Start states a fixed number of steps before real acquisitions, for milestone tests: for each kind of gain a run
-made over its start (an item bit, an energy tank, missile capacity), the kept visit with the shortest path to it
+made over its start (an item bit, an energy tank, missile capacity, a boss), the kept visit with the shortest path to it
 is replayed from the run's start file, minus the last BEFORE steps, and saved.
 
 Usage: python near_starts.py <run> [steps before, ...]    (writes cache/near-<run>-<gain>-<steps>.state)
@@ -16,7 +16,7 @@ from pathlib import Path
 from controls import ACTIONS, FRAMES_PER_STEP
 from emulator import Emulator
 from explorers import ROM
-from metroid import ENERGY_TANKS, ITEMS, MAX_MISSILES, at
+from metroid import ENERGY_TANKS, ITEMS, KRAID_STATUE, MAX_MISSILES, RIDLEY_STATUE, at
 from progress import ITEM_BITS
 
 
@@ -26,6 +26,9 @@ def gains(view, start):
         found.append("tank")
     if view[at(MAX_MISSILES)] > start[at(MAX_MISSILES)]:
         found.append("missile pack")
+    for name, statue in (("Kraid", KRAID_STATUE), ("Ridley", RIDLEY_STATUE)):
+        if view[at(statue)] & 0x80 and not start[at(statue)] & 0x80:
+            found.append(name)
     return found
 
 

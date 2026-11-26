@@ -152,6 +152,7 @@ class Archive:
 
 
 CHOOSER_REFIT_EVERY, CHOOSER_WINDOW = 2000, 50000
+GAIN_KEYS = ("items", "energy tanks", "max missiles", "bosses")  # progress fields --stop-at-gain watches
 CHOOSER_LAG = 5000  # decisions a "later" label waits for its lineage to grow
 
 
@@ -250,6 +251,8 @@ def parse_arguments():
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
     parser.add_argument("--start-state", help="a file holding a save state to explore from, instead of power-on")
     parser.add_argument("--stop-at-item", help="diagnostic: stop once progress shows this item (e.g. \"long beam\")")
+    parser.add_argument("--stop-at-gain", action="store_true",
+                        help="diagnostic: stop at the first new item, energy tank, missile capacity or boss")
     parser.add_argument("--record", type=float, default=0.1, metavar="FRACTION",
                         help="share of segments whose button sequences are saved as training data")
     parser.add_argument("--stop-after-stall", type=float, metavar="MINUTES",
@@ -327,6 +330,7 @@ def main():
     for worker_index in range(explorers.count):
         assign(worker_index)
     started = last_log = last_checkpoint = time.perf_counter()
+    first_line = None  # the first metrics line, the baseline for --stop-at-gain
     deadline = started + args.minutes * 60
     stall_window = args.stop_after_stall * 60 if args.stop_after_stall else None
     sizes = [(started, len(archive.places))]
@@ -404,6 +408,10 @@ def main():
                 metrics.flush()
                 last_log = now
                 sizes.append((now, len(archive.places)))
+                first_line = first_line or line
+                if args.stop_at_gain and any(line[k] != first_line[k] for k in GAIN_KEYS):
+                    print(f"stopping: an acquisition after {now - started:.0f}s", flush=True)
+                    break
                 if args.stop_at_item and any(args.stop_at_item in item for item in line["items"]):
                     print(f"stopping: got the {args.stop_at_item} after {now - started:.0f}s", flush=True)
                     break

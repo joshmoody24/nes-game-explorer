@@ -950,3 +950,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   First tank from 1000 steps away.
 - Guard against slow runs: `tools/capped` now kills anything over 4 min unless `LONG="reason"` (logged to
   runs/long-runs.log).
+- **Doomed saves, three fixes tried** (long holds, full-energy tank-1000 start, 3 workers x 3 min; doomed = dies
+  within 60 steps with no buttons, `python -m checks.doomed_check <room> <runs>`): ~40% of saves kept in room
+  (0,7,17) are doomed in every archive, at a median of full energy (14), so energy hoarding can't see them
+  (`--keep-more 4217,263`: 0/4 crossed, plain 0/4 in the same batch; 2/4 in an earlier batch: base rate ~25%).
+  Up-front check (4 random continuations before keeping): at 30 steps it flags 0/23 doomed saves; at 90 steps it
+  catches 19/23 but explorer speed drops 57K -> 4K frames/s. Retiring visits whose tries all die: the lava keeps
+  supplying new doomed visits for the same places (87-95% of stored saves doomed, 3-7K places), 0/4. All removed.
+  Lesson: stop hill-climbing one optional wall at a ~25% base rate with n=4.
