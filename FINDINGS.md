@@ -888,3 +888,15 @@ the state-level danger prediction to choose which states to keep and explore fro
   No byte subset works because the hand-made "room" (map x/y) itself moves while scrolling: it's a coarse
   position, not a scene id. Next idea: place = bytes moved by holding a direction, each bucketed by how far it
   moves per few steps (multi-scale position), plus the few bytes that change only at the biggest transitions.
+- **Found places, more variants** (6 min x 5 workers from the first missiles, 2 seeds; hand-made: 39/33 rooms, ~2.7K
+  places; `--generic-places room|position|both`, bytes from `generic_places.py`):
+  - direction-moved bytes, top one per direction and hold (too coarse offline): 16/15 rooms.
+  - bytes picked by dwell (each changes at most every 16 steps of play, place every 8; hand-made is 8.5):
+    drops noise bytes on its own, but live 14/17 rooms, ~17K places.
+  - hybrids: found position + hand-made room 23/25 rooms (13K places: splits); found room + hand-made position
+    16/7 rooms. Both halves are at fault.
+  - carry pairs (`python -m checks.carry_check ...`): fine x/y wrap into 0x30c (a screen bit), not map x/y; Metroid
+    moves its map position at screen transitions, not as a byte carry.
+  Second-agent review: hand-made "room" is coarse position, not a room id; races with 2 seeds can't separate
+  20-30% (same-setup spread 28-39); judge by milestones over more seeds. **Parked** until the Zelda stage; the
+  real Metroid bottleneck is long-range (resources paying off far away).

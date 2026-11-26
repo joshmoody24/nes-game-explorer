@@ -73,7 +73,7 @@ class Settings:
     # keeps just the shortest path.
     keep_more: str = ""
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
-    generic_places: bool = False  # where-am-I from bytes found by generic_places.py, not named Metroid bytes
+    generic_places: str = ""  # "room", "position" or "both": parts of location from bytes found by generic_places.py
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
     # Hand-given knowledge, for diagnosis: split places by energy band, so healthy and nearly dead versions
@@ -88,13 +88,15 @@ def found_place_bytes():
 
 
 def location(memory, settings):
-    """Which room and roughly where in it, as 5 numbers."""
-    if settings.generic_places:
-        scene, (first, second) = found_place_bytes()
-        return (zlib.crc32(memory.take(scene).tobytes()), 0, 0,
-                int(memory[first]) // settings.block_size, int(memory[second]) // settings.block_size)
-    return (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]),
-            int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size)
+    """Which room and roughly where in it."""
+    found = settings.generic_places
+    if found:
+        scene, position = found_place_bytes()
+    room = ((zlib.crc32(memory.take(scene).tobytes()),) if found in ("room", "both")
+            else (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X])))
+    where = (tuple(int(memory[b]) // bucket for b, bucket in position) if found in ("position", "both")
+             else (int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size))
+    return room + where
 
 
 def hand_made_place(memory, settings):
