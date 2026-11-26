@@ -860,3 +860,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   11x8/3 shades 1, 15%. No sweet spot: Metroid reuses tiles across rooms, so coarse screenshots of different
   corridors match. Generic places need a learned representation (e.g. trained to separate states far apart in
   steps) or a better RAM-based one, not plain downscaling.
+- **Learned places** (`python -m checks.embed_places_check layer-keep-45min+layer2-watch+paths-15min`: RAM encoder
+  trained with temporal contrast, k-means on 3,000 library states): 130/400/1000 groups -> purity 38/51/64% at
+  8/10/12 groups per room. Worse than screenshots.
+- **Scene-change bytes as generic places** (`python -m checks.scene_bytes_check ...`, 31 s): bytes that change at
+  >= X% of scene changes and <= Y% of other steps: (2%, 0.10%): 2,110 bytes, 15 places per room, **91% pure**;
+  (5%, 0.05%): 2,048 bytes, 8 per room, **74%**; (10%, 0.02%): 2 per room, 55%. Matches screenshots (76% at 10)
+  with no rendering, from RAM, game-agnostic. Metroid's map x/y bytes are excluded (they also change while
+  scrolling within a room); room-layout data is picked instead. Missing: generic position within a room.
