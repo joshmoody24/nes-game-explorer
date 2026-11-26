@@ -1162,3 +1162,10 @@ the state-level danger prediction to choose which states to keep and explore fro
   history 60% and 2874/2789. go_explore now counts a --familiar run only if its start save has the same
   permanent_progress (items byte, Kraid and Ridley statue bits). Open: a run that slowly climbed a needed shaft
   (honest7) would mark it stale again; counting visits still cannot tell worn-out from unfinished.
+- **Uncheated chain reaches Norfair and Ridley's lair.** From cache/col11-bottom.state (an honest7 save, Kraid dead),
+  same-progress familiar history (honest3-6): Norfair within 3.4 min (honest8), 109 -> 153 -> 194 -> 221 rooms over
+  3-minute chunks (honest8b-e), then a stall at the Norfair lava corridor (21,26)->(21,25). Autopsy: honest1 crossed it
+  on 4 energy without touching lava, so it is technique, not energy; the explorer spent ~1,500 of 3.2M tries on those
+  three cells (frontier diluted by ~100K places), and one-cell progress per try is ~1% or less. A fresh layer from the
+  richest healthy save at (21,28) (61 energy, cache/lava-edge-farmed.state): Ridley's lair in 3.2 min (lava-layer2,
+  64 rooms). The healthy saves at (21,26) itself had 1 energy (a layer from one died at once).
