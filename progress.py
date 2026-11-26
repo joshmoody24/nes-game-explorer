@@ -50,8 +50,9 @@ class Progress:
         self.items |= int(memory[at(ITEMS)])
         self.max_tanks = max(self.max_tanks, int(memory[at(ENERGY_TANKS)]))
         self.max_missiles = max(self.max_missiles, int(memory[at(MAX_MISSILES)]))
-        # Bit 0 of a statue byte is set when its boss dies (bit 7 only once the statues are raised later).
-        self.statues |= (memory[at(KRAID_STATUE)] & 1) | ((memory[at(RIDLEY_STATUE)] & 1) << 1)
+        # A statue byte's low bits are set when its boss dies (Kraid showed 0x01, Ridley 0x02); bit 7 only once
+        # the statues are raised later.
+        self.statues |= int(memory[at(KRAID_STATUE)] & 3 != 0) | (int(memory[at(RIDLEY_STATUE)] & 3 != 0) << 1)
 
     def merge(self, other):
         """Folds in what another Progress (e.g. from a worker process) has seen."""

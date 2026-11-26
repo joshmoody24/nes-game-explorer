@@ -998,3 +998,12 @@ the state-level danger prediction to choose which states to keep and explore fro
   is beaten** (statue byte bit 0, 38 saves) within 3 min. progress.py read bit 7 (statues raised, happens later) and
   missed it; fixed to bit 0. Saved as cache/after-kraid.state. General version to build: find "enemy health" bytes
   automatically (bytes that drop when you shoot, never refill) and add them to places.
+- **Ridley** (diagnostic chain): his room is (29,17), found by parsing the ROM's room data (Ridley's room pointer
+  table found by scanning his bank for 40 consecutive valid rooms at 0x1618F; the method recovers Kraid's known table
+  at 0x121E5; boss entries have type byte high nibble 4: Kraid 0x48 in room 0x1D at (29,8), Ridley 0x49 in room
+  0x12; doors: blue from (29,18), 10-missile from (29,16)). (29,18) is a lava corridor: single tries die 96% even at
+  99 energy; holding left sinks into the lava below the door. A 3-min exploration with energy refilled to 99
+  (`--refill ...,262:0x99,263:0x09`) entered his room. Ridley: slot 0, 140 HP. Fight with `--place-bytes 1035:8`:
+  HP bands down to 0-9 in 3 min; resumed with 1035:2: down to HP 1. From HP 1, 12% of 200-step tries start his death
+  explosion (slot status 3); the statue byte then becomes **0x02** (Kraid gave 0x01), so a boss kill = statue low
+  bits (progress.py fixed again). Surviving post-kill save: cache/after-ridley.state. Both bosses beaten (separately).

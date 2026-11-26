@@ -27,7 +27,7 @@ def gains(view, start):
     if view[at(MAX_MISSILES)] > start[at(MAX_MISSILES)]:
         found.append("missile pack")
     for name, statue in (("Kraid", KRAID_STATUE), ("Ridley", RIDLEY_STATUE)):
-        if view[at(statue)] & 1 and not start[at(statue)] & 1:  # bit 0: the boss is dead
+        if view[at(statue)] & 3 and not start[at(statue)] & 3:  # low bits: the boss is dead
             found.append(name)
     return found
 
