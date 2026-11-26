@@ -939,3 +939,14 @@ the state-level danger prediction to choose which states to keep and explore fro
   the exit of room (0,7,21).
 - Climb with carry (`climb.py climb-carry --layer0 climb2/layer0 --carry 2`): layers 1-4 from layer 0 events, no
   new acquisitions; first carry step found need 0 at its targets (carried anyway: fixed, carry now skips them).
+- **Fast probe** (`python -m checks.tries_check <state> <target room> [tries] [last button]`, ~8 s for 1000 tries;
+  `STEPS=` sets try length): from the explorer's furthest saves at both walls, 0% of tries reach the next room and
+  ~90% die, whatever the holds; from the known route's save at nearly the same spot, 26-66% reach it (momentum
+  best, 66%). With no buttons, the explorer's saves lose energy and die in ~55 steps: **they are sinking in lava**.
+  Places can't tell a doomed state from a safe one, and the archive keeps whichever arrived first/shortest.
+- **No damage, retested with long holds** from the full-energy tank-1000 start (4 seeds, 3 workers, 3 min):
+  long holds 119 / **184 (the tank)** / 31 / 31; long holds + no-damage 31 x4. Over 300 steps 97% of tries take
+  some damage (tries_check), so ending tries at damage cuts nearly all long tries. Dropped as a hard rule.
+  First tank from 1000 steps away.
+- Guard against slow runs: `tools/capped` now kills anything over 4 min unless `LONG="reason"` (logged to
+  runs/long-runs.log).
