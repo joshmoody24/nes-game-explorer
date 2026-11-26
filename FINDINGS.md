@@ -1069,3 +1069,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   resources barely matter at this budget; the beam alone does damage. 20 workers, 3 + 3 min: 62, then stuck: **every
   lowest-HP save has Samus at 2 energy** (chosen 83-226 times, always dying). Keying records by holdings, and letting
   saves that match a record count: 66 and 78 (n=1 each, no better); both reverted.
+- Honest Kraid, 22 workers x 12 min: Kraid to 63 (same as 6 min): more time doesn't help; a mechanism is missing.
+- Honest Kraid from a full arrival (energy 199, 10/10 missiles, set once, no refills; 22 workers x 12 min): to 45,
+  with Samus at 0 energy and 0 missiles in every lowest save: the fight spends everything (first save to reach each
+  record kept, however much it spent). **Records now keep the richest save per level** (a save matching the record is
+  offered under the same place, so the keep rule swaps in one holding more): Kraid to 34.

@@ -261,9 +261,13 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                 record = value < low or value > high
                 went_down, went_up = went_down or value < low, went_up or value > high
                 count += record
-                if record and not (went_down and went_up) and count >= PROGRESS_RECORDS:
+                # A save matching the record is offered too, under the same place, so the keep rule (beats) swaps in
+                # one that got there holding more: the cheapest way to each level of progress.
+                at_record = value <= low if went_down else value >= high
+                if at_record and went_down != went_up and count >= PROGRESS_RECORDS:
                     value_place = ("record", room, b, value)
-                    if value_place not in known and value_place not in found:
+                    rivals = known.get(value_place, []) + ([(found[value_place][2], found[value_place][1])] if value_place in found else [])
+                    if not any(beats(rival, (held, length)) for rival in rivals):
                         found[value_place] = (state, length, held)
                 _records[(room, b)] = (min(low, value), max(high, value), went_down, went_up, count)
             rare_values = []
