@@ -905,3 +905,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   8 min from the first missiles): rooms base 28/28/25/27 (median 27.5), chooser 27/31/25/31 (median 29); places
   base ~1.4K, chooser 1.3-2.2K. No acquisition in any run (no tank, no missile capacity, no Long Beam). Small
   edge, inside the noise; this budget is too small to show long-range payoff.
+- **Parked idea (Josh): goal-reaching with inflated budgets.** When training "reach G within k steps" from
+  recordings, sometimes give a k larger than the recording took, so k means "at most" and the policy doesn't
+  stretch to fill it. Pair with shortest-known labels (loop cutting where a state recurs; triangle rule
+  d(A,C) <= d(A,B) + d(B,C) over recordings) so it learns the best route rather than copying roundabout ones.
+  For the online-agent product; the save-scummer already keeps the shortest replayable path per place.
