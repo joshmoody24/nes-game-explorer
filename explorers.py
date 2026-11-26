@@ -7,6 +7,7 @@ reached by a shorter path. The main process keeps an append-only log of (place, 
 so keeping a worker in sync just means sending the updates logged since its last task.
 """
 
+import functools
 import os
 import zlib
 from dataclasses import dataclass
@@ -72,6 +73,7 @@ class Settings:
     # keeps just the shortest path.
     keep_more: str = ""
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
+    generic_places: bool = False  # where-am-I from bytes found by generic_places.py, not named Metroid bytes
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
     # Hand-given knowledge, for diagnosis: split places by energy band, so healthy and nearly dead versions
@@ -79,10 +81,25 @@ class Settings:
     health_buckets: bool = False
 
 
-def hand_made_place(memory, settings):
-    """Area, room, Samus's rough position in the room, and progress counters."""
+@functools.lru_cache(maxsize=1)
+def found_place_bytes():
+    found = np.load("cache/generic-places.npz")
+    return found["scene"], found["position"]
+
+
+def location(memory, settings):
+    """Which room and roughly where in it, as 5 numbers."""
+    if settings.generic_places:
+        scene, (first, second) = found_place_bytes()
+        return (zlib.crc32(memory.take(scene).tobytes()), 0, 0,
+                int(memory[first]) // settings.block_size, int(memory[second]) // settings.block_size)
     return (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]),
-            int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size,
+            int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size)
+
+
+def hand_made_place(memory, settings):
+    """Where (see location) and progress counters."""
+    return (*location(memory, settings),
             int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5,
             int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None,
             energy_band(energy_of(memory)) if settings.health_buckets else None)

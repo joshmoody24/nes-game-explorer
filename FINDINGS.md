@@ -873,3 +873,18 @@ the state-level danger prediction to choose which states to keep and explore fro
   Metroid's x byte ranks 3rd, y byte 1st (byte 20, top on both axes, is likely the controller-input copy:
   needs filtering out). So both halves of a place (which room, where in it) can be found from RAM without
   game knowledge.
+- **Do pixels speed up learning?** (`python -m checks.pixel_learning_check layer-keep-45min+layer2-watch+paths-15min
+  2000`; 149K steps; held-out AUC; RAM / pixels / both):
+  - MLP on 30x32 screenshots: damage soon at 32 recordings .691/.575/.697, at 1600 .863/.797/.879; new room soon
+    at 32 .650/.492/.622, at 1600 .746/.703/.763.
+  - Small conv net on 56x60 (`CONV=1 SHRINK=4`): damage at 1600 .862/.841/.877; new room at 1600 .743/.728/.768.
+  - RAM learns faster at every size; pixels close the gap with more data and a conv; both is best only at the
+    largest size (+.015-.025). No shortcut. Reason (correcting my claim): Metroid copies the room layout from ROM
+    into cartridge RAM (98% of the found scene bytes are there), so RAM has the geometry.
+- **Found places, live race** (`--generic-places`, 6 min x 5 workers from the first missiles): 18/18 rooms, ~18K
+  places vs hand-made 39/33 rooms, ~2.7K places. Within one hand-made place the found room bytes take a median 17
+  values (object-slot tables refill while scrolling). Choosing bytes by whole-set change rate, or using the
+  explorer's own recordings: still 7-13 per room. Stricter scene changes merge rooms (7 bytes: 29% purity).
+  No byte subset works because the hand-made "room" (map x/y) itself moves while scrolling: it's a coarse
+  position, not a scene id. Next idea: place = bytes moved by holding a direction, each bucketed by how far it
+  moves per few steps (multi-scale position), plus the few bytes that change only at the biggest transitions.

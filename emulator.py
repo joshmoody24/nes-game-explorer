@@ -58,6 +58,12 @@ class MemoryView:
     def __getitem__(self, index):
         return self._state[self._system_start + index if index < 0x800 else self._cartridge_start + index - 0x800]
 
+    def take(self, indices):
+        """Many bytes at once, like numpy's take on Emulator.memory()."""
+        indices = np.asarray(indices)
+        offsets = np.where(indices < 0x800, self._system_start + indices, self._cartridge_start + indices - 0x800)
+        return np.frombuffer(self._state, np.uint8)[offsets]
+
 
 def button_mask(*names):
     return sum(1 << BUTTONS[name] for name in names)
