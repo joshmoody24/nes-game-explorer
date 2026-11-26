@@ -55,6 +55,8 @@ class Archive:
     holdings_weight: float = 0.0  # see explorers.Settings.favor_holdings
     dangers: list = field(default_factory=list)  # see explorers.Settings.danger_model
     danger_weight: float = 0.0
+    productive: list = field(default_factory=list)  # segments from each visit that found a new place
+    mastery_weight: float = 0.0
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
@@ -89,6 +91,7 @@ class Archive:
         self.active.append(True)
         self.surprises.append(0)
         self.deaths.append(0)
+        self.productive.append(0)
         self.updates.append((place, visit))
         return "better" if visits else "new"
 
@@ -104,6 +107,9 @@ class Archive:
         weights = active / np.sqrt(1 + chosen) / np.maximum(visits_per_place[place_of], 1)
         # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
         weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
+        if self.mastery_weight:
+            p = (np.array(self.productive) + 0.5) / (chosen + 1)
+            weights = weights * (1 + self.mastery_weight * 4 * np.clip(p, 0, 1) * (1 - np.clip(p, 0, 1)))
         if self.danger_weight and self.dangers:
             danger = np.array(self.dangers)
             weights = weights / (1 + self.danger_weight * danger / max(float(np.median(danger)), 1e-6))
@@ -224,7 +230,8 @@ def main():
         archive = resumed_archive(args.resume, settings, emulator)
     else:
         archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings,
-                          danger_weight=settings.avoid_danger if settings.danger_model else 0.0)
+                          danger_weight=settings.avoid_danger if settings.danger_model else 0.0,
+                          mastery_weight=settings.mastery)
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     progress = Progress()
@@ -271,6 +278,7 @@ def main():
                                 archive.dangers[i] = danger.score(settings.danger_model, emulator.memory(state))
                 archive.surprises[segment.start] += len(segment.patterns - seen_patterns)
                 archive.deaths[segment.start] += segment.died
+                archive.productive[segment.start] += new_places > 0
                 seen_patterns |= segment.patterns
                 if rng.random() < args.record:
                     recordings.add(segment)

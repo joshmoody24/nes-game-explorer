@@ -52,6 +52,9 @@ class Settings:
     # dangerous: weight / (1 + avoid_danger x danger / typical danger). Empty path: off.
     danger_model: str = ""
     avoid_danger: float = 0.0
+    # Mastery: favor visits whose explorations find something new only sometimes (the edge of current
+    # skill): weight x (1 + mastery x 4p(1-p)), p = share of segments from the visit that found a new place.
+    mastery: float = 0.0
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
