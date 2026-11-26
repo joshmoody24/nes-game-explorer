@@ -79,9 +79,14 @@ def main():
         updates, opt_state = optimizer.update(grads, opt_state)
         return optax.apply_updates(params, updates), opt_state, value
 
-    for k in jax.random.split(jax.random.key(1), 4000):
-        params, opt_state, _ = step(params, opt_state, k)
     predict = lambda a: np.asarray(mlp(params, jnp.asarray(a)))[:, 0]
+    done = 0
+    for total in [1000, 4000, 20000]:
+        for k in jax.random.split(jax.random.key(total), total - done):
+            params, opt_state, _ = step(params, opt_state, k)
+        done = total
+        print(f"after {total} steps: correlation on training visits {np.corrcoef(predict(x[~test]), targets[~test])[0, 1]:.2f}, "
+              f"held out {np.corrcoef(predict(x[test]), targets[test])[0, 1]:.2f}", flush=True)
     pred = predict(x[test])
     print(f"{len(x)} visits; held-out correlation of predicted vs actual target: "
           f"{np.corrcoef(pred, targets[test])[0, 1]:.2f}")

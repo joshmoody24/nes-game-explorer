@@ -803,3 +803,18 @@ the state-level danger prediction to choose which states to keep and explore fro
   Per-visit discovery is too sparse and noisy for 17K examples; a learned "is this state good" needs a denser
   signal (e.g. per-step rewards for new places along recorded segments, learned with bootstrapping) or more
   data.
+
+## 2026-11-25 (late): hand-mixed drives over-concentrate; drives as senses for a learned chooser
+
+- **Drive combinations** (`tools/drives.sh`: from the Long Beam, missile hoarding, 6 min x 4 workers, 2 seeds;
+  power = favor holdings 10, safety = avoid danger 3, surprise 5, mastery 5 = 4p(1-p) bonus for visits whose
+  segments sometimes find new places): none 43/36 rooms; all 14/16; leave-one-out 10-19. No run reached the
+  Bombs door room. Multiplying several "focus here" weights over-concentrates exploration; no single drive is
+  to blame. The budget and the rooms proxy are also too weak to separate drives (Josh's question; agreed).
+- **Value model, training length** (`checks/value_check.py`): descendants target: training correlation 0.25 ->
+  0.41 -> 0.76 at 1K/4K/20K steps while held out 0.14 -> 0.11 -> 0.08 (memorizing noise); per-try target:
+  0.05/0.16/0.24 vs 0.02/0.08/0.14 (slowly improving, low ceiling). Per-visit targets are too sparse.
+- **Drives as senses** (Josh: a learned system taking drives as inputs): logistic regression from the start
+  visit's drive signals to "did the segment find a new place", 266K segments from the drive runs: held-out AUC
+  0.868, but **leaky** (features come from the final archive, including the predicted segments' own outcomes;
+  success rate carried most weight). Next: log drive signals at selection time, then learn the chooser online.
