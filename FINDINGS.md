@@ -1301,3 +1301,7 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Laptop throttled:** Ryzen 7840HS at ~950 MHz under load (below its 1.1 GHz minimum; boost on, performance
   profile, 41-44 C, 65 W charger) => ~3K emulator frames/s per process vs ~20K per worker on the unit. Hardware/
   firmware throttle (EC/PROCHOT); fixing it could give the laptop ~4-5x compute. Needs Josh.
+- **No-picking autochain leaves Ridley's lair** (ac-multi3, MULTISTART + rooms-only stall test, 12 workers): rooms flat
+  at 50 for 9 chunks with a new layer every other chunk, then 55, 57, and Norfair at chunk 12. Total for the stretch
+  (ac-multi + multi2 + multi3): ~234M frames, vs ~216M for the hand-guided chain (honest9/9b + ridley-exit layers).
+  Same cost, zero hand picks. Continuing toward Brinstar.
