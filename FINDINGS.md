@@ -1273,3 +1273,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   untrained random encoder (90-94%) and PCA of the raw inputs (92-95%) do as well on these ~8-room runs: no gain.
   Stepping stones: every learned novelty score at or below chance (0.32-0.55); even a cheat (closeness to the actual
   first success) only 0.65 - stones' siblings are just as close. Not wired in. The frontier isn't distance/novelty.
+- **One-way moves** (heuristic/oneway/; 18 successful bench runs, stones + 60 other saves each, 10 random tries of
+  150 steps from each save: does any get back to the parent save's location?): one-way AUC 0.39 - stones are
+  slightly MORE reversible (return rate ~0.27 vs ~0.27-0.30, varies). Hypothesis rejected. Converging picture from
+  all frontier tests: stepping stones are old, central, well-connected hubs (early, many descendants, die more),
+  not novel states or one-way edges.
+- Memory check for the unit crash (laptop): resumes of 8K / 36K-place archives peak at 0.9 / 2.5 GB; workers stay
+  ~50-63 MB; main grows ~55 KB/place. A 100K-place resume should need ~6-12 GB, far under the 40 GB cap, so memory
+  is an unlikely cause.
