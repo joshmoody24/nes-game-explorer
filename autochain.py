@@ -1,6 +1,6 @@
 """
-Layers without a human picking start saves: run short chunks; while each chunk makes at least as many new discoveries
-(rooms, records) as the one before, resume it; otherwise start a new layer. A new layer starts either from the newest
+Layers without a human picking start saves: run short chunks; while each chunk finds at least one new room and at least
+as many as the one before, resume it; otherwise start a new layer. A new layer starts either from the newest
 room's best-held save (earlier layers become history), or with MULTISTART=1 from every save the stalled chunk found.
 Usage: [CONTINUE_RUN=<run> CONTINUE_AFTER=<index>] python autochain.py <name> <start.state> <chunks> [go_explore options...]
 """
@@ -71,10 +71,10 @@ if __name__ == "__main__":
         subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
         m = last_metrics(new_run)
         saved = load(new_run)
-        now = {discovery(p) for p in saved["places"]}
+        now = {room(p) for p in saved["places"]}  # rooms only: record places churn by the hundred and made stalls noisy
         found = len(now - seen)
         seen |= now
-        stalled = previous_found is not None and found < previous_found
+        stalled = found == 0 or (previous_found is not None and found < previous_found)
         print(f"chunk {chunk}: {new_run} rooms {m['rooms']} areas {m['areas']} items {m['items']} bosses {m.get('bosses')} "
               f"| {found} new discoveries, {m['frames'] / 1e6:.0f}M frames{' | stall' if stalled else ''}", flush=True)
         if stalled and MULTISTART:
