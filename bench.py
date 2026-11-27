@@ -1,6 +1,6 @@
 """
-Wall benchmark: for each wall of the winning route, explore from its start save in 1-minute chunks (resuming) under ONE
-shared configuration, and record the minute its success test first holds (None = not within the budget).
+Wall benchmark: for each wall of the winning route, explore from its start save for one 3-minute run under ONE
+shared configuration, and record whether its success test holds, and how far into the archive the first success appears.
 Usage: python bench.py <name> <seed> [wall ...]   (config: BENCH_ARGS env, default below; TURBO env as usual)
 """
 import json, os, pickle, subprocess, sys, zlib
@@ -9,11 +9,14 @@ from emulator import Emulator
 from explorers import ROM
 from metroid import MAP_X, MAP_Y, at
 
-CHUNKS = 3
-DEFAULT_ARGS = "--keep-more 4217,263 --repeat-probability 0.99 --repeat-spread 0.09 --novel-values --workers 10"
+MINUTES = float(os.environ.get("BENCH_MINUTES", 3.0))
+DEFAULT_ARGS = "--keep-more 4217,263 --repeat-probability 0.99 --repeat-spread 0.09 --novel-values --workers 20"
 brinstar = lambda v: (int(v[0x74]) or 0x10) == 0x10
 cell = lambda v: (int(v[MAP_Y]), int(v[MAP_X]))
 SHAFT = {(14, 6), (15, 6), (16, 6), (17, 6), (18, 6), (19, 6), (18, 7), (19, 7), (18, 8)}
+# Each wall's history is the runs before it in the winning chain (later runs that crossed the wall would mark its
+# road as worn out, which a real chain never sees). --familiar keeps only those with the same permanent progress.
+HISTORY = {'kraid-fight': 'honest1,honest2,kh-honest', 'kraid-shaft': 'honest3,honest4,honest5', 'column-11': 'honest3,honest4,honest5,honest6', 'lava-corridor': 'honest3,honest4,honest5,honest6,honest8e', 'ridley-door': 'honest8e,lava-layer2c', 'ridley-fight': 'ridley-door3', 'ridley-exit': 'honest9,honest9b', 'ice-beam': 'honest10e,ice2b', 'tourian-entry': 'honest11,honest11b,honest11c', 'missile-door': 'tourian-armed3', 'zebetites': 'tourian-20m3,mb1', 'mother-brain': 'mb2,mb-cross', 'escape': ''}
 WALLS = {
     "kraid-fight":    ("cache/kraid-honest-farmed.state", lambda v: v[at(0x687B)] & 3),
     "kraid-shaft":    ("cache/after-kraid-brinstar.state", lambda v: brinstar(v) and cell(v) not in SHAFT and cell(v)[0] <= 14),
@@ -38,17 +41,13 @@ if __name__ == "__main__":
     results = {}
     for wall in walls:
         start, test = WALLS[wall]
-        previous, solved = None, None
-        for minute in range(1, CHUNKS + 1):
-            run = f"bench/{name}/s{seed}/{wall}/m{minute}"
-            cmd = ["python", "-u", "go_explore.py", run, "--minutes", "1", "--seed", str(seed), "--start-state", start] + args
-            if previous: cmd += ["--resume", previous]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            states = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))["states"]
-            if any(test(emulator.view(s)) for s in states):
-                solved = minute; break
-            previous = run
-        results[wall] = solved
-        print(f"{name} seed {seed} {wall}: {'minute ' + str(solved) if solved else 'not broken in ' + str(CHUNKS) + ' min'}", flush=True)
+        run = f"bench/{name}/s{seed}/{wall}"
+        familiar = ["--familiar", HISTORY[wall]] if HISTORY[wall] and os.environ.get("BENCH_HISTORY", "1") == "1" else []
+        subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", str(MINUTES), "--seed", str(seed), "--start-state", start] + args + familiar,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        states = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))["states"]
+        first = next((i for i, s in enumerate(states) if test(emulator.view(s))), None)
+        results[wall] = None if first is None else round(first / len(states), 3)
+        print(f"{name} seed {seed} {wall}: " + ("not broken" if first is None else f"broken; first success at {results[wall]:.0%} of the archive"), flush=True)
     out = Path("runs/bench") / name / f"s{seed}.json"; out.write_text(json.dumps(results))
     print(name, seed, "broke", sum(1 for v in results.values() if v), "of", len(results), "walls")
