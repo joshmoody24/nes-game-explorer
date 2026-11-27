@@ -1372,3 +1372,12 @@ the state-level danger prediction to choose which states to keep and explore fro
   rooms (4 rooms, 60 layouts) and spend the budget; passing ones open the door by ~0.5M. 15-worker runs aren't
   reproducible (worker timing), so seeds are independent draws. Per-wall verdicts need ~10+ seeds; only large
   totals mean anything at 5.
+- **compare.py, hand vs scroll:8,32** (15 paired seeds, 1-worker runs, 2M cap): hand 2.33 walls/seed, scroll 1.07
+  (A-B +1.27, 95% +0.93 to +1.60). lava 7/15 vs 0/15, ridley-door 14/15 (0.51M) vs 12/15 (0.70M), ridley-exit 14/15
+  (0.61M) vs 4/15 (1.61M), missile-door 0 vs 0.
+- **One worker beats fifteen per frame:** hand broke ridley-door 14/15 with 1-worker runs vs 3/5 with 15-worker runs on
+  the same 2M budget. Each try sees the archive as of the previous try. Many small parallel runs > one wide run.
+- **Restarts rejected (at <=2M):** expected frames per pass with restarts every c = mean(min(f,c))/P(f<=c), from the
+  15 seeds per wall above: never better than one full run beyond noise (lava hand 3.5M at c=2M vs 11.1M at 0.75M;
+  ridley-exit 0.91M vs 1.39M at 0.5M; ridley-door 0.67M vs 0.62M best). Time-to-pass isn't heavy-tailed; runs build on
+  their own archive.
