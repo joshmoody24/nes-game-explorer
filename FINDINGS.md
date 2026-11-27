@@ -1281,3 +1281,9 @@ the state-level danger prediction to choose which states to keep and explore fro
 - Memory check for the unit crash (laptop): resumes of 8K / 36K-place archives peak at 0.9 / 2.5 GB; workers stay
   ~50-63 MB; main grows ~55 KB/place. A 100K-place resume should need ~6-12 GB, far under the 40 GB cap, so memory
   is an unlikely cause.
+- **Selection weights from hindsight signals, raced** (laptop, 8 workers, 3 walls x 3 seeds, 3M-frame budget; frames
+  to break ridley-exit / ridley-door / lava-corridor). Control rerun on current code: 0.6/1.5/0.6M, 1.1/1.2/0.6M,
+  2.5/1.3/1.4M; the first control (0.5/0.2/1.0, 0.6/1.1/0.2, fail/1.5/0.6) was lucky. Vs pooled control (6 seeds):
+  --fertility 1 clearly worse; --descendants 0.5 and --scenery-recency 1 about even on exit and lava, worse on the
+  door (~1.8M vs ~0.8M); --stale-steps 40 about even, worse on lava. None kept. **Noise lesson:** per wall, seeds
+  spread ~+-0.5M frames, so 3 seeds only detect ~2x effects; smaller real gains need many more seeds or walls.
