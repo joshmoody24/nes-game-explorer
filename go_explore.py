@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from emulator import Emulator
-from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings
+from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings, place_of_state
 from metroid import permanent_progress, start_game
 from progress import Progress
 
@@ -182,7 +182,8 @@ def resumed_archive(run_name, settings, emulator, first=0):
     paths = saved.get("paths") or [None] * len(saved["states"])
     for state, place, path in list(zip(saved["states"], places, paths))[first:]:
         memory = emulator.view(state)
-        archive.offer(place if place is not None and place[0] == "record" else hand_made_place(memory, settings),
+        # Record and screen places are kept as stored: a screen place's history of cells can't be seen from the state.
+        archive.offer(place if place is not None and place[0] in ("record", "screen") else place_of_state(emulator, state, settings),
                       state, holdings(memory, settings), path=path)
     return archive
 
@@ -330,7 +331,7 @@ def main():
     else:
         archive = Archive()
         memory = emulator.view(start)
-        archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
+        archive.offer(place_of_state(emulator, start, settings), start, holdings(memory, settings), path=b"")
     archive.familiar = familiar_counts(args.familiar, start, emulator)
     archive.fertility = args.fertility
     archive.descendant_weight = args.descendants
@@ -352,7 +353,7 @@ def main():
     def assign(worker_index):
         index = archive.choose(rng)
         start_paths[worker_index] = archive.paths[index]
-        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates)
+        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.places[index], archive.updates)
 
     for worker_index in range(explorers.count):
         assign(worker_index)

@@ -52,6 +52,10 @@ class Settings:
     # that has set records both ways in a room is not a progress counter; one counts only from its PROGRESS_RECORDS-th
     # one-way record on.
     novel_values: bool = False
+    # What a place is: "hand" (Metroid's map and inventory bytes, see hand_made_place), or a game-agnostic scheme:
+    # "screen:W,H,D[,N]", the picture shrunk to W x H cells of D gray levels (Go-Explore's domain-agnostic cell),
+    # together with the N different cells seen before it: look-alike screens are told apart by where play came from.
+    place_scheme: str = "hand"
 
 
 def location(memory, settings):
@@ -64,6 +68,47 @@ def hand_made_place(memory, settings):
     """Where (see location) and progress counters."""
     return (*location(memory, settings),
             int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5)
+
+
+def screen_cell(gray, width, height, levels):
+    """gray (brightness 0-1, see Emulator.gray) averaged over a width x height grid, each cell cut to levels steps."""
+    rows, columns = gray.shape[0] // height, gray.shape[1] // width
+    small = gray[:rows * height, :columns * width].reshape(height, rows, width, columns).mean(axis=(1, 3))
+    return np.minimum(small * levels, levels - 1).astype(np.uint8).tobytes()
+
+
+def screen_scheme(settings):
+    """(width, height, levels, cells of context) of a screen place scheme."""
+    width, height, levels, *context = (int(v) for v in settings.place_scheme.removeprefix("screen:").split(","))
+    return width, height, levels, (context or [0])[0]
+
+
+def screen_place(history, gray, settings):
+    """A screen place, and the history of different cells it extends (see Settings.place_scheme)."""
+    width, height, levels, context = screen_scheme(settings)
+    cell = screen_cell(gray, width, height, levels)
+    history = history if history and history[-1] == cell else (history + (cell,))[-(context + 1):]
+    return ("screen", history), history
+
+
+def uses_picture(settings):
+    return settings.place_scheme != "hand"
+
+
+def place_of_state(emulator, state, settings):
+    """The place of a stored state with no history; a screen scheme draws one more frame from it to see the picture."""
+    if not uses_picture(settings):
+        return hand_made_place(emulator.view(state), settings)
+    emulator.load(state)
+    emulator.run(0, 1, picture=True)
+    return screen_place((), emulator.gray(), settings)[0]
+
+
+def room_of(place):
+    """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
+    if place[0] == "record":
+        return place[1]
+    return place if place[0] == "screen" else tuple(place[:3])
 
 
 @dataclass
@@ -102,7 +147,7 @@ _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
 
 
-def explore(emulator, rng, settings, known, start, start_state, start_path_length):
+def explore(emulator, rng, settings, known, start, start_state, start_path_length, start_place):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched, _records
     died = False
@@ -114,12 +159,13 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     buttons = actions(settings.turbo)
     action = rng.integers(len(buttons))
     stale = 0
+    history = start_place[1] if start_place[0] == "screen" else ()
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
         if rng.random() > repeat_probability:
             action = rng.integers(len(buttons))
-        emulator.run(buttons[action], FRAMES_PER_STEP)
+        emulator.run(buttons[action], FRAMES_PER_STEP, picture=uses_picture(settings))
         pressed.append(action)
         state = emulator.save()
         memory = emulator.view(state)
@@ -139,7 +185,11 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         if memory[GAME_MODE] == GAME_OVER or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay):
             died = True
             break
-        place = hand_made_place(memory, settings) + ((zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ())
+        if uses_picture(settings):
+            place, history = screen_place(history, emulator.gray(), settings)
+        else:
+            place = hand_made_place(memory, settings)
+        place += (zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ()
         new = place not in known and place not in found
         length = start_path_length + step + 1
         held = holdings(memory, settings)
@@ -154,7 +204,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             if settings.stale_steps is not None and stale >= settings.stale_steps:
                 break
         if settings.novel_values:
-            room = (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]))
+            room = room_of(place)
             for b, value in rare_values:
                 low, high, went_down, went_up, count = _records.get((room, b), (value, value, False, False, 0))
                 record = value < low or value > high
@@ -181,10 +231,10 @@ def worker(connection, settings, seed, index):
     rng = np.random.default_rng([seed, index])  # by worker index, not pid, so a run can be reproduced exactly
     known = {}
     while (task := connection.recv()) is not None:
-        start, start_state, start_path_length, updates = task
+        start, start_state, start_path_length, start_place, updates = task
         for place, visit in updates:
             known.setdefault(place, []).append(visit)
-        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length))
+        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length, start_place))
 
 
 class Explorers:
@@ -199,9 +249,9 @@ class Explorers:
         self._updates_sent = [0] * count
         self.count = count
 
-    def send(self, worker_index, start, start_state, start_path_length, updates):
+    def send(self, worker_index, start, start_state, start_path_length, start_place, updates):
         """updates is the main process's full, append-only log of (place, (holdings, path length)) updates."""
-        self._connections[worker_index].send((start, start_state, start_path_length,
+        self._connections[worker_index].send((start, start_state, start_path_length, start_place,
                                               updates[self._updates_sent[worker_index]:]))
         self._updates_sent[worker_index] = len(updates)
 

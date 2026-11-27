@@ -141,9 +141,10 @@ class Emulator:
         if data:
             self._last_frame = (ctypes.string_at(data, height * pitch), width, height, pitch)
 
-    def run(self, buttons=0, frames=1):
+    def run(self, buttons=0, frames=1, picture=False):
         """Holds buttons for frames frames. The loop runs in C. With TURBO set, A and B are let go for the second
-        half: most games act once per press, so holding fire fires once."""
+        half: most games act once per press, so holding fire fires once. picture=True draws the last frame (see
+        picture()); drawing every frame costs ~7x."""
         if buttons & TURBO:
             held = buttons & ~TURBO
             pressed = frames // 2
@@ -151,7 +152,13 @@ class Emulator:
             self._shim.shim_run(self._retro_run, held, pressed)
             buttons, frames = held & ~TURBO_BUTTONS, frames - pressed
         self._buttons = buttons
-        self._shim.shim_run(self._retro_run, buttons, frames)
+        if picture and not self._capturing_video:
+            self._shim.shim_run(self._retro_run, buttons, frames - 1)
+            self.capture_video(True)
+            self._shim.shim_run(self._retro_run, buttons, 1)
+            self.capture_video(False)
+        else:
+            self._shim.shim_run(self._retro_run, buttons, frames)
 
     def save(self):
         if not self._core.retro_serialize(self._state_buffer, self.state_size):
@@ -188,11 +195,30 @@ class Emulator:
 
     def frame(self, buttons):
         """Holds buttons for one frame, with video on, and returns the picture as RGB [height, width, 3]."""
-        self._core.retro_set_video_refresh(self._capture_callback)
-        self._capturing_video = True
+        was_capturing = self._capturing_video
+        self.capture_video(True)
         self.run(buttons)
-        self._capturing_video = False
-        self._core.retro_set_video_refresh(ctypes.cast(self._shim.shim_video, ctypes.c_void_p))
+        self.capture_video(was_capturing)
+        return self.picture()
+
+    def capture_video(self, on):
+        """With video on, every frame is drawn and picture() shows the latest. Off skips drawing (faster)."""
+        self._core.retro_set_video_refresh(self._capture_callback if on else ctypes.cast(self._shim.shim_video, ctypes.c_void_p))
+        self._capturing_video = on
+
+    def gray(self, stride=4):
+        """The last drawn frame as brightness 0-1, every stride-th pixel each way: cheap enough to run every step."""
+        raw, width, height, pitch = self._last_frame
+        if self._pixel_format == PIXEL_FORMAT_XRGB8888:
+            pixels = np.frombuffer(raw, np.uint8).reshape(height, pitch // 4, 4)[::stride, :width:stride, :3]
+            return pixels.sum(axis=2) / (3 * 255)
+        words = np.frombuffer(raw, np.uint16).reshape(height, pitch // 2)[::stride, :width:stride]
+        if self._pixel_format == PIXEL_FORMAT_RGB565:
+            return (((words >> 11) & 31) / 31 + ((words >> 5) & 63) / 63 + (words & 31) / 31) / 3
+        return (((words >> 10) & 31) + ((words >> 5) & 31) + (words & 31)) / 93
+
+    def picture(self):
+        """The last frame drawn while capturing video, as RGB [height, width, 3]."""
         raw, width, height, pitch = self._last_frame
         if self._pixel_format == PIXEL_FORMAT_XRGB8888:
             pixels = np.frombuffer(raw, np.uint8).reshape(height, pitch // 4, 4)[:, :width]
