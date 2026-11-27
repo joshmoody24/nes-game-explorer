@@ -55,6 +55,8 @@ class Settings:
     # What a place is: "hand" (Metroid's map and inventory bytes, see hand_made_place), or a game-agnostic scheme:
     # "screen:W,H,D[,N]", the picture shrunk to W x H cells of D gray levels (Go-Explore's domain-agnostic cell),
     # together with the N different cells seen before it: look-alike screens are told apart by where play came from.
+    # "scroll:B": dead reckoning. The camera's moves (hardware scroll, see Emulator.scroll) added up since the start,
+    # in B-pixel blocks; B must divide 32 so a place plus the current scroll pins down the exact position again.
     place_scheme: str = "hand"
 
 
@@ -92,11 +94,46 @@ def screen_place(history, gray, settings):
 
 
 def uses_picture(settings):
-    return settings.place_scheme != "hand"
+    return settings.place_scheme.startswith("screen:")
+
+
+SCROLL_RANGE = (512, 480)  # the picture chip scrolls over two name tables each way: 2 x 256 wide, 2 x 240 tall
+
+
+def scroll_block(settings):
+    return int(settings.place_scheme.removeprefix("scroll:"))
+
+
+def travelled(start_place, scroll, settings):
+    """Where dead reckoning starts a try: the exact position its start place stands for (see Settings.place_scheme)."""
+    block = scroll_block(settings)
+    if start_place[0] != "scroll":
+        return scroll
+    return tuple(b * block + s % block for b, s in zip(start_place[1:], scroll))
+
+
+CUT = 16  # pixels: a camera move bigger than this in one step is a jump (a new room loading), not travel
+
+
+def moved(position, previous_scroll, scroll, block):
+    """position plus the camera's move between two scroll readings, each axis taken the short way round. A jump
+    (see CUT) isn't travel: it moves position only by the jump's remainder modulo block, which keeps position and scroll
+    in step modulo block (travelled relies on that) and keeps position continuous across a room change."""
+    def step(p, q, s, r):
+        move = (s - q + r // 2) % r - r // 2
+        return p + (move if abs(move) <= CUT else (move + block // 2) % block - block // 2)
+    return tuple(step(p, q, s, r) for p, q, s, r in zip(position, previous_scroll, scroll, SCROLL_RANGE))
+
+
+def scroll_place(position, settings):
+    block = scroll_block(settings)
+    return ("scroll",) + tuple(p // block for p in position)
 
 
 def place_of_state(emulator, state, settings):
     """The place of a stored state with no history; a screen scheme draws one more frame from it to see the picture."""
+    if settings.place_scheme.startswith("scroll:"):
+        return scroll_place(emulator.scroll(state), settings)
     if not uses_picture(settings):
         return hand_made_place(emulator.view(state), settings)
     emulator.load(state)
@@ -108,7 +145,7 @@ def room_of(place):
     """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
     if place[0] == "record":
         return place[1]
-    return place if place[0] == "screen" else tuple(place[:3])
+    return place if place[0] in ("screen", "scroll") else tuple(place[:3])
 
 
 @dataclass
@@ -160,6 +197,10 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     action = rng.integers(len(buttons))
     stale = 0
     history = start_place[1] if start_place[0] == "screen" else ()
+    scrolling = settings.place_scheme.startswith("scroll:")
+    if scrolling:
+        previous_scroll = emulator.scroll(start_state)
+        position = travelled(start_place, previous_scroll, settings)
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
@@ -185,7 +226,11 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         if memory[GAME_MODE] == GAME_OVER or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay):
             died = True
             break
-        if uses_picture(settings):
+        if scrolling:
+            scroll = emulator.scroll(state)
+            position, previous_scroll = moved(position, previous_scroll, scroll, scroll_block(settings)), scroll
+            place = scroll_place(position, settings)
+        elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
         else:
             place = hand_made_place(memory, settings)

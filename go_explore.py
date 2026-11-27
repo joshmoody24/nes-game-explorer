@@ -182,8 +182,8 @@ def resumed_archive(run_name, settings, emulator, first=0):
     paths = saved.get("paths") or [None] * len(saved["states"])
     for state, place, path in list(zip(saved["states"], places, paths))[first:]:
         memory = emulator.view(state)
-        # Record and screen places are kept as stored: a screen place's history of cells can't be seen from the state.
-        archive.offer(place if place is not None and place[0] in ("record", "screen") else place_of_state(emulator, state, settings),
+        # Record, screen and scroll places are kept as stored: their history (cells, distance travelled) isn't in the state.
+        archive.offer(place if place is not None and place[0] in ("record", "screen", "scroll") else place_of_state(emulator, state, settings),
                       state, holdings(memory, settings), path=path)
     return archive
 

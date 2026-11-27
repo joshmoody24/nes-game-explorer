@@ -120,6 +120,7 @@ class Emulator:
         self._system_slice = slice(blocks["LRAM"][0], sum(blocks["LRAM"]))
         self._cartridge_slice = slice(blocks["SRAM"][0], sum(blocks["SRAM"]))
         self._nametable_slice = slice(blocks["NTAB"][0], sum(blocks["NTAB"]))
+        self._ppu_start = blocks["PPUR"][0]
 
     def _environment(self, command, data):
         if command == ENVIRONMENT_GET_CAN_DUPE:
@@ -184,6 +185,15 @@ class Emulator:
     def nametable(self, state=None):
         """The background tile layout (2 KB), from a save state or the current one."""
         return (state or self.save())[self._nametable_slice]
+
+    def scroll(self, state):
+        """The picture chip's scroll as (x 0-511, y 0-479), read from its registers: the same hardware in every NES
+        game. QuickNES keeps the PPU's 15-bit temporary address ("loopy t": coarse x, coarse y, name table, fine y)
+        at PPUR bytes 8-9 and the fine x at byte 10."""
+        t = state[self._ppu_start + 8] | state[self._ppu_start + 9] << 8
+        x = (t & 31) * 8 + (state[self._ppu_start + 10] & 7) + 256 * ((t >> 10) & 1)
+        y = ((t >> 5) & 31) * 8 + ((t >> 12) & 7) + 240 * ((t >> 11) & 1)
+        return x, min(y, 479)
 
     def load(self, state):
         if not self._core.retro_unserialize(state, len(state)):
