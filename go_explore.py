@@ -58,12 +58,17 @@ class Archive:
     place_of: list = field(default_factory=list)  # each visit's place_numbers entry, kept as visits are added
     children: list = field(default_factory=list)  # saves each visit's tries created
     fertility: float = 0.0  # --fertility: weight visits by (1 + children) ** fertility; 0 is off
+    descendants: list = field(default_factory=list)  # all saves descended from each visit
+    since_scenery_change: list = field(default_factory=list)  # generations since an ancestor had different scenery
+    scenery: list = field(default_factory=list)  # each visit's tile bag (see tile_bag)
+    descendant_weight: float = 0.0  # --descendants: weight by (1 + descendants) ** this; 0 is off
+    scenery_recency: float = 0.0  # --scenery-recency: weight by 1 / (1 + since_scenery_change) ** this; 0 is off
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
 
     def path_length(self, i):
         return UNKNOWN_PATH_LENGTH if self.paths[i] is None else len(self.paths[i])
 
-    def offer(self, place, state, held, parent=-1, path=None):
+    def offer(self, place, state, held, parent=-1, path=None, scenery=None):
         """Keeps the visit unless one already kept there beats it. Returns "new" (new place), "better" or None."""
         if self.worn_rooms and place[0] != "record" and tuple(place[:3]) in self.worn_rooms and place not in self.index:
             return None
@@ -90,6 +95,14 @@ class Archive:
         self.times_chosen.append(self.familiar.get(place[:LOCATION_SIZE], 0) if place[0] != "record" else 0)
         self.parents.append(parent)
         self.children.append(0)
+        self.descendants.append(0)
+        self.scenery.append(scenery)
+        self.since_scenery_change.append(self.since_scenery_change[parent] + 1 if parent >= 0 and scenery is not None and scenery == self.scenery[parent] else 0)
+        ancestor, seen = parent, set()
+        while ancestor >= 0 and ancestor not in seen:  # a replaced visit can take a descendant as parent: loops
+            seen.add(ancestor)
+            self.descendants[ancestor] += 1
+            ancestor = self.parents[ancestor]
         if parent >= 0:
             self.children[parent] += 1
         self.paths.append(path)
@@ -121,11 +134,25 @@ class Archive:
         visits_per_place = np.bincount(place_of, weights=active)
         weights = active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
         # Stepping stones to a breakthrough are saves whose tries keep creating saves (FINDINGS 2026-11-27).
-        return weights * (1 + np.array(self.children)) ** self.fertility if self.fertility else weights
+        if self.fertility:
+            weights = weights * (1 + np.array(self.children)) ** self.fertility
+        if self.descendant_weight:
+            weights = weights * (1 + np.array(self.descendants)) ** self.descendant_weight
+        if self.scenery_recency:
+            # Saves that just crossed into new scenery were the likeliest to lead on (FINDINGS 2026-11-27, breadth test).
+            weights = weights / (1 + np.array(self.since_scenery_change)) ** self.scenery_recency
+        return weights
 
 
 WEIGHTS_REUSE = 200  # choices between recomputing choice weights (see Archive.choose)
 GAIN_KEYS = ("items", "energy tanks", "max missiles", "bosses")  # progress fields --stop-at-gain watches
+
+
+def tile_bag(nametable):
+    """Which background tiles fill a good part of the screen (32+ cells across both name tables, attribute bytes
+    left out): steady while scrolling within a scene, different in new scenery."""
+    cells = np.frombuffer(nametable, np.uint8)[np.r_[0:960, 1024:1984]]
+    return frozenset(np.flatnonzero(np.bincount(cells, minlength=256) >= 32).tolist())
 
 
 def choice_group(place):
@@ -203,6 +230,8 @@ def parse_arguments():
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
     parser.add_argument("--skip-worn", action="store_true", help="don't keep new saves in rooms history wore out (more than the median room's history)")
     parser.add_argument("--stop-when", help="a bench.py wall name: stop as soon as a new save passes that wall's success test")
+    parser.add_argument("--descendants", type=float, default=0.0, help="weight visits by (1 + saves descended from them) ** this; 0 is off")
+    parser.add_argument("--scenery-recency", type=float, default=0.0, help="weight visits by 1 / (1 + generations since their scenery changed) ** this; 0 is off")
     parser.add_argument("--fertility", type=float, default=0.0, help="weight visits by (1 + saves their tries created) ** this; 0 is off")
     parser.add_argument("--max-frames", type=int, default=0, help="stop after this many emulated frames (a budget that means the same on any machine); 0 = no limit")
     parser.add_argument("--segments", type=int, default=0, help="stop after this many tries (for exact before/after comparisons); 0 = no limit")
@@ -303,6 +332,8 @@ def main():
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     archive.familiar = familiar_counts(args.familiar, start, emulator)
     archive.fertility = args.fertility
+    archive.descendant_weight = args.descendants
+    archive.scenery_recency = args.scenery_recency
     if args.skip_worn and archive.familiar:
         archive.worn_rooms = worn_rooms(archive.familiar, hand_made_place(emulator.view(start), settings))
     progress = Progress()
@@ -351,7 +382,7 @@ def main():
                 start_path = start_paths[worker_index]
                 outcomes = []
                 for place, (state, length, held) in segment.found.items():
-                    outcomes.append(archive.offer(place, state, held, segment.start,
+                    outcomes.append(archive.offer(place, state, held, segment.start, scenery=tile_bag(emulator.nametable(state)) if archive.scenery_recency else None, path=
                                                   None if start_path is None else start_path + segment.actions[:length - len(start_path)]))
                     if outcomes[-1]:
                         if stop_test and stop_test(emulator.view(state)):
