@@ -1324,3 +1324,15 @@ the state-level danger prediction to choose which states to keep and explore fro
   30K/59K/117K frames/s. 8 processes: all cores ~1 GHz, 47K total. Overnight's 12-worker runs got ~33K, so every
   laptop chain last night ran at about a quarter of what 4 workers would have given. Suspect a 65 W charger limit.
 - **Thinkpad (joshm-thinkpad-1) online:** reproduces refA exactly; 16 workers ~172K frames/s.
+- **Frontier autochain reaches Brinstar** (ac-front2, thinkpad, 15 workers): post-Ridley save -> Brinstar in 23 chunks,
+  ~430M frames, zero hand picks, once "discovered" meant new to the whole chain (bc10a62). The layer-only version
+  kept re-finding Ridley's lair (90% of tries there) and never left Norfair. Paused at chunk 26 for the place bench.
+- **Generic places, offline (honest10e saves; 'aliased' = a place holding 2+ hand rooms, a diagnostic only):**
+  screen cells alone have no sweet spot: 16x12x8 / 11x8x8 give ~1 place per save (1-4% aliased); 8x6x4 / 4x3x4
+  give 560-800 / 80-115 places but 75-83% / 98% aliased. Slow RAM bytes (auto-chosen by change rate) are worse:
+  hundreds of slow junk bytes make every save unique (2400-2900 cells per 3000 saves). Context (Josh's idea: a
+  place is defined by its neighbours): coarse cell + previous 1/2/3 different cells cuts 8x6x4 aliasing 91% ->
+  76/66/56%. Fine cells as "words" fail: 30K cells in 90K steps, each seen ~3 times, so context can't repeat.
+- **--place-scheme screen:W,H,D[,N]** (c3ea262): shrunk gray picture (every 4th pixel, last frame of each step
+  drawn; 0.04 ms) + N previous different cells. Hand scheme unchanged. Bench: hand vs screen:11,8,8 vs
+  screen:6,4,4,2, 13 walls, 10M-frame cap, history off, seeds 1-5, on the thinkpad.
