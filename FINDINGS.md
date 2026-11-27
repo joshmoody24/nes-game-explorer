@@ -1241,3 +1241,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   it picked Ridley lair (wasted 3 chunks). Fixed rule: healthiest best-holdings save in the most recently discovered
   room (offline check on the stalled archive: lands at (21,29), next to the hand pick (20,30)). Remaining slowness:
   the "no new room" stall test never fires while side rooms trickle in.
+- **2026-11-27, laptop (unit offline).** No general feature recovers the 20 hand-picked layer starts (best: fewest
+  saves in the room ranks the pick at the 22nd percentile; newest room / most holdings do worse than random; good picks
+  often had 1-14 energy). Measured usefulness doesn't work as a label either: random tries from one save (400 and 3000
+  steps, incl. the hand picks) never broke a wall in 13 archives; walls fall to chains of saves, not single tries.
+  Next label: ancestors of the first success in fresh runs (the stepping stones), free from stored parents.
+  heuristic/ (laptop) has the scripts. Speed: shutdown 55.7 -> 1.6 s per run, history cache 70.6 -> 1.5 s,
+  weights() 72 -> 27 ms at 62K visits; reproducible runs (worker seeds by index, identical fingerprints across
+  machines); --max-frames budget; cleanup redone (go_explore + explorers 898 -> 604 lines).
