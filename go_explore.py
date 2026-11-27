@@ -55,6 +55,7 @@ class Archive:
     cached_weights: tuple = None  # (archive size, choice probabilities, uses) reused by choose
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
+    place_of: list = field(default_factory=list)  # each visit's place_numbers entry, kept as visits are added
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
 
     def path_length(self, i):
@@ -78,7 +79,7 @@ class Archive:
             self.parents[slot] = parent
             self.updates.append((place, visit))
             return "better"
-        self.place_numbers.setdefault(choice_group(place), len(self.place_numbers))
+        self.place_of.append(self.place_numbers.setdefault(choice_group(place), len(self.place_numbers)))
         self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
@@ -109,7 +110,7 @@ class Archive:
 
     def weights(self):
         active = np.array(self.active)
-        place_of = np.array([self.place_numbers[choice_group(p)] for p in self.places])
+        place_of = np.array(self.place_of)
         visits_per_place = np.bincount(place_of, weights=active)
         return active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
 
