@@ -246,10 +246,11 @@ def resumed_archive(run_name, settings, emulator):
     archive = Archive()
     # Keeps a visit's stored place when it isn't a hand-made one (e.g. a record place, see Settings.novel_values).
     places = saved.get("places") or [None] * len(saved["states"])
-    for state, place in zip(saved["states"], places):
+    paths = saved.get("paths") or [None] * len(saved["states"])
+    for state, place, path in zip(saved["states"], places, paths):
         memory = emulator.view(state)
-        archive.offer(place if place is not None and place[0] == "record" else hand_made_place(memory, settings),
-                      state, holdings(memory, settings))
+        archive.offer(place if place is not None and place[0] in ("record", "climb") else hand_made_place(memory, settings),
+                      state, holdings(memory, settings), path=path)
     return archive
 
 
