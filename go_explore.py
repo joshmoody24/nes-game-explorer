@@ -173,14 +173,14 @@ def directory_gigabytes(path):
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e9
 
 
-def resumed_archive(run_name, settings, emulator):
-    """An earlier run's saved states, re-sorted into places under the current settings."""
+def resumed_archive(run_name, settings, emulator, first=0):
+    """An earlier run's saved states from index first on, re-sorted into places under the current settings."""
     saved = pickle.loads(zlib.decompress((RUNS / run_name / "checkpoint.pkl.z").read_bytes()))
     archive = Archive()
     # Keeps a visit's stored place when it isn't a hand-made one (e.g. a record place, see Settings.novel_values).
     places = saved.get("places") or [None] * len(saved["states"])
     paths = saved.get("paths") or [None] * len(saved["states"])
-    for state, place, path in zip(saved["states"], places, paths):
+    for state, place, path in list(zip(saved["states"], places, paths))[first:]:
         memory = emulator.view(state)
         archive.offer(place if place is not None and place[0] == "record" else hand_made_place(memory, settings),
                       state, holdings(memory, settings), path=path)
@@ -227,6 +227,7 @@ def parse_arguments():
     parser.add_argument("--minutes", type=float, default=4)
     parser.add_argument("--workers", type=int, default=18)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--resume-after", type=int, default=0, help="with --resume, keep only saves from this index on (e.g. those a stalled chunk found)")
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
     parser.add_argument("--skip-worn", action="store_true", help="don't keep new saves in rooms history wore out (more than the median room's history)")
     parser.add_argument("--stop-when", help="a bench.py wall name: stop as soon as a new save passes that wall's success test")
@@ -325,7 +326,7 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = Path(args.start_state).read_bytes() if args.start_state else start_game(emulator)
     if args.resume:
-        archive = resumed_archive(args.resume, settings, emulator)
+        archive = resumed_archive(args.resume, settings, emulator, args.resume_after)
     else:
         archive = Archive()
         memory = emulator.view(start)

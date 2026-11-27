@@ -1,7 +1,7 @@
 """
-Layers without a human picking start saves: run short chunks; while a chunk finds a new room, resume it; when a chunk
-stalls, start a fresh layer from the healthiest, best-holding save among the places the last chunk discovered.
-Earlier layers that began with the same permanent progress count as familiar history.
+Layers without a human picking start saves: run short chunks; while each chunk makes at least as many new discoveries
+(rooms, records) as the one before, resume it; otherwise start a new layer. A new layer starts either from the newest
+room's best-held save (earlier layers become history), or with MULTISTART=1 from every save the stalled chunk found.
 Usage: python autochain.py <name> <start.state> <chunks> [go_explore options...]
 """
 import json, os, pickle, subprocess, sys, zlib
@@ -10,69 +10,85 @@ from pathlib import Path
 from controls import FRAMES_PER_STEP
 from emulator import Emulator
 from explorers import ROM
-from metroid import MAP_X, MAP_Y
 
-CHUNK_MINUTES = 3.0
+CHUNK_MINUTES = float(os.environ.get("CHUNK_MINUTES", 3.0))
 HOLDINGS = (4217, 263)  # the bytes --keep-more hoards (missiles, energy)
+MULTISTART = os.environ.get("MULTISTART") == "1"
+
+
+def load(run):
+    return pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))
 
 
 def last_metrics(run):
     return json.loads((Path("runs") / run / "metrics.jsonl").read_text().splitlines()[-1])
 
 
-def keeps_holdings(emulator, state):
-    """Standing still for 20 steps loses none of the hoarded bytes."""
+def room(place):
+    return tuple(place[1]) if place[0] == "record" else tuple(place[:3])
+
+
+def discovery(place):
+    """What a place adds to the map of things found: its room, or for a record place the record itself."""
+    return tuple(place[:4]) if place[0] == "record" else tuple(place[:3])
+
+
+def holdings_after_idle(emulator, state):
+    """The hoarded bytes after standing still for 20 steps: a save about to lose them is worth less."""
     emulator.load(state)
-    before = [int(emulator.memory()[b]) for b in HOLDINGS]
     for _ in range(20):
         emulator.run(0, FRAMES_PER_STEP)
-    return all(int(emulator.memory()[b]) >= v for b, v in zip(HOLDINGS, before))
+    memory = emulator.memory()
+    return [int(memory[b]) for b in HOLDINGS]
 
 
-def frontier_start(emulator, run):
-    """The healthy save with the best holdings in the most recently discovered room that has one."""
-    states = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))["states"]
-    room = lambda s: (int(emulator.view(s)[0x74]) or 0x10, int(emulator.view(s)[MAP_Y]), int(emulator.view(s)[MAP_X]))
-    first, members = {}, {}
-    for i, s in enumerate(states):
-        first.setdefault(room(s), i)
-        members.setdefault(room(s), []).append(s)
+def frontier_start(emulator, saved):
+    """The save holding the most after standing still, in the most recently discovered room."""
+    states, places = saved["states"], saved["places"]
+    first = {}
+    for i, place in enumerate(places):
+        first.setdefault(room(place), i)
+    newest = max(first, key=first.get)
+    here = [i for i, p in enumerate(places) if room(p) == newest and p[0] != "record"] or [i for i, p in enumerate(places) if room(p) == newest]
     tops = [max(int(emulator.view(s)[b]) for s in states) or 1 for b in HOLDINGS]
-    score = lambda s: sum(int(emulator.view(s)[b]) / t for b, t in zip(HOLDINGS, tops))
-    for r in sorted(first, key=lambda r: -first[r]):
-        for s in sorted(members[r], key=lambda s: -score(s))[:50]:
-            if keeps_holdings(emulator, s):
-                return s
-    return states[-1]
+    return max((states[i] for i in here[:200]), key=lambda s: sum(v / t for v, t in zip(holdings_after_idle(emulator, s), tops)))
 
 
 if __name__ == "__main__":
     name, start, chunks, extra = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4:]
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    layers, layer, run, rooms = [], 0, None, 0
+    history = [r for r in os.environ.get("FAMILIAR", "").split(",") if r]
+    run, resume_after, previous_found, seen, layer = None, 0, None, set(), 0
     Path("cache/auto").mkdir(parents=True, exist_ok=True)
     for chunk in range(chunks):
         new_run = f"{name}/c{chunk:02d}"
-        args = ["python", "-u", "go_explore.py", new_run, "--minutes", str(CHUNK_MINUTES), "--workers", "20"] + extra
-        if run is None:
-            args += ["--start-state", start]
-        else:
-            args += ["--resume", run, "--start-state", start]
-        familiar = [r for r in layers if r != run] + [r for r in os.environ.get("FAMILIAR", "").split(",") if r]
-        if familiar:
-            args += ["--familiar", ",".join(familiar)]
+        args = ["python", "-u", "go_explore.py", new_run, "--minutes", str(CHUNK_MINUTES), "--start-state", start] + extra
+        if run:
+            args += ["--resume", run, "--resume-after", str(resume_after)]
+        if history:
+            args += ["--familiar", ",".join(history)]
+        carried = len(load(run)["states"]) - resume_after if run else 0
         subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
         m = last_metrics(new_run)
-        grew = m["rooms"] > rooms
-        print(f"chunk {chunk}: {new_run} rooms {m['rooms']} areas {m['areas']} items {m['items']} | {'progress' if grew else 'stall'}", flush=True)
-        rooms = max(rooms, m["rooms"])
-        if grew:
-            run = new_run
-        else:
-            state = frontier_start(emulator, new_run)
-            layers.append(new_run)
+        saved = load(new_run)
+        now = {discovery(p) for p in saved["places"]}
+        found = len(now - seen)
+        seen |= now
+        stalled = previous_found is not None and found < previous_found
+        print(f"chunk {chunk}: {new_run} rooms {m['rooms']} areas {m['areas']} items {m['items']} bosses {m.get('bosses')} "
+              f"| {found} new discoveries, {m['frames'] / 1e6:.0f}M frames{' | stall' if stalled else ''}", flush=True)
+        if stalled and MULTISTART:
+            # The stalled run isn't history here: its newest saves ARE the new layer, and history would mark them worn.
             layer += 1
+            print(f"  new layer {layer} from the {len(saved['states']) - carried} saves chunk {chunk} found", flush=True)
+            run, resume_after, previous_found, seen = new_run, carried, None, set()
+        elif stalled:
+            layer += 1
+            history.append(new_run)
             start = f"cache/auto/{name.replace('/', '-')}-layer{layer}.state"
-            Path(start).write_bytes(state)
+            Path(start).write_bytes(frontier_start(emulator, saved))
             print(f"  new layer {layer} from {start}", flush=True)
-            run, rooms = None, 0
+            run, resume_after, previous_found, seen = None, 0, None, set()
+        else:
+            run, resume_after, previous_found = new_run, 0, found
+    print("DONE", flush=True)
