@@ -1351,3 +1351,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   ridley-exit 1.1M (B=16; hand 0.7M), missile-door 8.9M (B=16; hand 5.7M); ridley-door never (hand 1.1M). Place
   counts stay sane (640-12K). Missing: where the player is on screen (height/aim) - next, find player-position bytes
   by contingency (which bytes respond to the controller).
+- **Contingency finds the player** (`python -m checks.contingency_check runs/honest10e/checkpoint.pkl.z`): score =
+  bytes whose right-minus-left (jump-minus-nothing) difference has a consistent sign across 300 saves AND grows from
+  3 to 6 steps of pressing. Samus x ($30E) ranks 2nd of 2048+8192 bytes for right/left, Samus y ($30D) joint 1st for
+  jump; the bytes beside them (81, 82, 6-9) look like working copies. Without the "grows" test the controller byte
+  and facing flags crowd the top. Plan: probe at run start, add the top bytes per axis (in blocks) to scroll places.
