@@ -78,6 +78,13 @@ class Settings:
     # Split a place when it earns it (crowding version): >0 starts each place as a coarse scroll block (8x the scheme's
     # block) and splits it into finer ones once play has landed in it on this many steps, down to the scheme's block.
     place_split: int = 0
+    # Stitched world map: after each camera jump, look the background layout up in a map of layouts seen so far and put
+    # the position back where that layout was first seen (shifted by the scroll difference), so every path into a room
+    # agrees on where it is. Off: positions only stay continuous.
+    stitch: bool = False
+    # Mutual-reachability places: 32-pixel scroll blocks merge into one group once play has moved both ways between
+    # them; a place is (group, player part). One-way drops and locked doors stay group borders.
+    place_groups: bool = False
 
 
 def location(memory, settings):
@@ -180,7 +187,7 @@ def room_of(place):
     """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
     if place[0] == "record":
         return place[1]
-    return place if place[0] in ("screen", "scroll", "level", "radius", "split") else tuple(place[:3])
+    return place if place[0] in ("screen", "scroll", "level", "radius", "split", "group") else tuple(place[:3])
 
 
 @dataclass
@@ -217,6 +224,42 @@ WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
 _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
+
+
+_layouts = {}  # per worker process: background layout checksum -> (position, scroll) when first seen, for Settings.stitch
+
+
+def stitched(position, scroll, nametable, block):
+    """Where position belongs after a camera jump: where this layout was first seen, moved by the scroll since then,
+    kept in step with scroll modulo block (travelled relies on that)."""
+    key = zlib.crc32(nametable)
+    if key not in _layouts:
+        _layouts[key] = (position, scroll)
+        return position
+    seen_position, seen_scroll = _layouts[key]
+    from_seen = moved(seen_position, seen_scroll, scroll, block)
+    # The position nearest the remembered one that has the same remainder modulo block as the current one.
+    return tuple(f + (p - f + block // 2) % block - block // 2 for f, p in zip(from_seen, position))
+
+
+_moves, _group_of = set(), {}  # per worker process: block-to-block moves seen, and union-find parents of blocks
+
+
+def group(block):
+    while _group_of.get(block, block) != block:
+        _group_of[block] = _group_of.get(_group_of[block], _group_of[block])
+        block = _group_of[block]
+    return block
+
+
+def saw_move(a, b):
+    """Records a move between blocks; once both directions have been seen, the two blocks' groups merge."""
+    if a != b:
+        _moves.add((a, b))
+        if (b, a) in _moves:
+            ra, rb = group(a), group(b)
+            if ra != rb:
+                _group_of[max(ra, rb)] = min(ra, rb)
 
 
 SPLIT_LEVELS = 4  # a split place's block is the scheme's block times 1, 2, 4 or 8
@@ -273,6 +316,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             keys = list(dict.fromkeys(p[:1 + width] for p in known if p[0] == "radius"))
             centers = np.array([k[1:] for k in keys], np.int64).reshape(len(keys), width)
         carry = _extras(emulator, settings).start(start_place)
+        last_block = tuple(p // 32 for p in position)
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
@@ -300,10 +344,18 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             break
         if scrolling:
             scroll = emulator.scroll(state)
+            jump = settings.stitch and any(min(abs(a - b), r - abs(a - b)) > CUT for a, b, r in zip(previous_scroll, scroll, SCROLL_RANGE))
             position, previous_scroll = moved(position, previous_scroll, scroll, scroll_block(settings)), scroll
+            if jump:
+                position = stitched(position, scroll, emulator.nametable(state), scroll_block(settings))
             probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
             extra = _extras(emulator, settings).part(state, memory, carry, probe_block, position)
             place = scroll_place(position, settings) + player_part(memory, settings) + extra
+            if settings.place_groups:
+                block = tuple(p // 32 for p in position)
+                saw_move(last_block, block)
+                last_block = block
+                place = ("group", group(block)) + player_part(memory, settings) + extra
             if settings.place_split:
                 place = split_place(position, memory, settings, _crowding) + extra
                 for ancestor in ancestors(place, extra):
