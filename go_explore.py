@@ -58,6 +58,7 @@ class Archive:
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     place_of: list = field(default_factory=list)  # each visit's place_numbers entry, kept as visits are added
+    place_level: list = field(default_factory=list)  # each place number's grid level (Settings.place_levels), else 0
     children: list = field(default_factory=list)  # saves each visit's tries created
     fertility: float = 0.0  # --fertility: weight visits by (1 + children) ** fertility; 0 is off
     descendants: list = field(default_factory=list)  # all saves descended from each visit
@@ -90,7 +91,10 @@ class Archive:
                 self.children[parent] += 1
             self.updates.append((place, visit))
             return "better"
-        self.place_of.append(self.place_numbers.setdefault(choice_group(place), len(self.place_numbers)))
+        number = self.place_numbers.setdefault(choice_group(place), len(self.place_numbers))
+        if number == len(self.place_level):
+            self.place_level.append(place[1] if place[0] == "level" else 0)
+        self.place_of.append(number)
         self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
@@ -135,6 +139,10 @@ class Archive:
         place_of = np.array(self.place_of)
         visits_per_place = np.bincount(place_of, weights=active)
         weights = active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
+        if any(self.place_level):
+            # Every grid size at once: each level gets an equal share, split over that level's places.
+            level = np.array(self.place_level)
+            weights = weights / np.bincount(level)[level[place_of]]
         # Stepping stones to a breakthrough are saves whose tries keep creating saves (FINDINGS 2026-11-27).
         if self.fertility:
             weights = weights * (1 + np.array(self.children)) ** self.fertility
@@ -185,7 +193,7 @@ def resumed_archive(run_name, settings, emulator, first=0):
     for state, place, path in list(zip(saved["states"], places, paths))[first:]:
         memory = emulator.view(state)
         # Record, screen and scroll places are kept as stored: their history (cells, distance travelled) isn't in the state.
-        archive.offer(place if place is not None and place[0] in ("record", "screen", "scroll") else place_of_state(emulator, state, settings),
+        archive.offer(place if place is not None and place[0] in ("record", "screen", "scroll", "level") else place_of_state(emulator, state, settings),
                       state, holdings(memory, settings), path=path)
     return archive
 

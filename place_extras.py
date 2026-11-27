@@ -14,6 +14,13 @@ to add, which sprite tiles are always on screen) comes from a short random wande
   fuzzy  8 bits of a random-projection hash of all RAM minus the run's start RAM: near-equal memories collide
   burst  which tiles fill the background just after the last camera jump: what the game drew for this room
   patch  the background tiles around the player (player_bytes as screen x, y): the local landmark
+Probe add-ons run short button tests from the current save whenever the scroll block changes (results carry forward
+until the next change); every probe frame counts toward the run's frame budget (carry["probe_frames"]):
+  afford what the buttons do here: for each of 6 held presses (left, right, up, down, jump, fire; 20 frames), whether
+         the player or camera moved and whether the camera jumped. Like tapping around with a cane.
+  reach  which 64-pixel blocks 4 short random walks (60 frames) end in: two saves in one room reach the same blocks
+  oneway how many camera jumps so far were one-way: after a jump, 6 random walks (60 frames) never bring the camera
+         back near where it was
 """
 import json, zlib
 from pathlib import Path
@@ -21,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from controls import FRAMES_PER_STEP, actions
+from emulator import button_mask
 
 CUT = 16
 FUZZY_BITS = 4
@@ -117,6 +125,11 @@ def pick(emulator, start_state, rng, settings, poke_share=None):
     return found
 
 
+MACROS = [button_mask(b) for b in ("LEFT", "RIGHT", "UP", "DOWN", "A", "B")]
+PROBE_STEPS = 5  # 20 frames
+WALK_STEPS, WALKS, RETURN_WALKS = 15, 4, 6
+
+
 def _fuzzy_weights(length):
     return np.random.default_rng(12345).choice([-1, 1], (8, length)).astype(np.int32)
 
@@ -130,19 +143,32 @@ class Extras:
         self.extra_bytes = [int(b) for b in settings.extra_bytes.split(",") if b]
         self.common = {int(t) for t in settings.common_tiles.split(",") if t}
         self.player = [int(b) for b in settings.player_bytes.split(",") if b]
+        self.buttons = actions(settings.turbo)
         if "fuzzy" in self.names:
             self.reference = emulator.memory(reference_state).astype(np.int32)
             self.weights = _fuzzy_weights(len(self.reference))
 
     def start(self, start_place):
         """Carry for a try from its start place (the burst signature it stood in)."""
-        burst = start_place[-len(self.names) + self.names.index("burst")] if "burst" in self.names and start_place[0] == "scroll" else None
-        return {"burst": burst, "scroll": None}
+        stored = lambda name: start_place[len(start_place) - len(self.names) + self.names.index(name)] \
+            if name in self.names and start_place[0] == "scroll" else None
+        return {"burst": stored("burst"), "oneway": stored("oneway") or 0, "scroll": None, "block": None, "probed": {},
+                "probe_frames": 0}
 
-    def part(self, state, memory, carry):
+    def part(self, state, memory, carry, block=None, position=None):
+        """block: the scroll place's block (probes rerun when it changes); position: the exact dead-reckoned position."""
         out, scroll = [], self.emulator.scroll(state)
-        if "burst" in self.names and (carry["burst"] is None or jumped(carry["scroll"], scroll)):
+        cut = jumped(carry["scroll"], scroll)
+        if "burst" in self.names and (carry["burst"] is None or cut):
             carry["burst"] = zlib.crc32(repr(sorted(tile_bag(self.emulator.nametable(state)))).encode())
+        if "oneway" in self.names and cut and not self._can_return(state, carry["scroll"], carry):
+            carry["oneway"] += 1
+        if block != carry["block"] or not carry["probed"]:
+            carry["block"], carry["probed"] = block, {}
+            if "afford" in self.names:
+                carry["probed"]["afford"] = self._afford(state, memory, scroll, carry)
+            if "reach" in self.names:
+                carry["probed"]["reach"] = self._reach(state, scroll, position, carry)
         carry["scroll"] = scroll
         for name in self.names:
             if name == "bytes":
@@ -159,7 +185,58 @@ class Extras:
                 out.append(carry["burst"])
             elif name == "patch":
                 out.append(self._patch(state, memory, scroll))
+            elif name in ("afford", "reach"):
+                out.append(carry["probed"][name])
+            elif name == "oneway":
+                out.append(carry["oneway"])
         return tuple(out)
+
+    def _run(self, buttons, steps, carry):
+        for _ in range(steps):
+            self.emulator.run(buttons, FRAMES_PER_STEP)
+        carry["probe_frames"] += steps * FRAMES_PER_STEP
+
+    def _afford(self, state, memory, scroll, carry):
+        bits = []
+        before = [int(memory[b]) for b in self.player]
+        for buttons in MACROS:
+            self.emulator.load(state)
+            self._run(buttons, PROBE_STEPS, carry)
+            after = self.emulator.save()
+            view = self.emulator.view(after)
+            moved = any(abs(int(view[b]) - v) > 2 for b, v in zip(self.player, before)) or self.emulator.scroll(after) != scroll
+            bits += [moved, jumped(scroll, self.emulator.scroll(after))]
+        self.emulator.load(state)
+        return int(np.packbits(bits)[0]) << 8 | int(np.packbits(bits)[1])
+
+    def _walks(self, state, count, carry):
+        """Scroll readings along count short random walks; seeded by the state, so the same save probes the same way."""
+        rng = np.random.default_rng(zlib.crc32(state[:4096]))
+        for _ in range(count):
+            self.emulator.load(state)
+            readings = []
+            for _ in range(WALK_STEPS):
+                self._run(self.buttons[rng.integers(len(self.buttons))], 1, carry)
+                readings.append(self.emulator.scroll(self.emulator.save()))
+            yield readings
+        self.emulator.load(state)
+
+    def _reach(self, state, scroll, position, carry):
+        from explorers import moved
+        ends = set()
+        for readings in self._walks(state, WALKS, carry):
+            here, previous = position or scroll, scroll
+            for reading in readings:
+                here, previous = moved(here, previous, reading, 8), reading
+            ends.add(tuple(p // 64 for p in here))
+        return tuple(sorted(ends))
+
+    def _can_return(self, state, before_jump, carry):
+        for readings in self._walks(state, RETURN_WALKS, carry):
+            if any(max(min(abs(a - b), r - abs(a - b)) for a, b, r in zip(reading, before_jump, (512, 480))) <= CUT
+                   for reading in readings):
+                return True
+        return False
 
     def _patch(self, state, memory, scroll):
         if len(self.player) < 3:

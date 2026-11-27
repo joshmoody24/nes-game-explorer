@@ -69,6 +69,9 @@ class Settings:
     extra_bytes: str = ""
     common_tiles: str = ""
     reference_state: str = ""  # file of the run's start save (the fuzzy add-on hashes RAM relative to it)
+    # Every grid size at once: >1 files each save under this many scroll places, the block (and player step) doubling
+    # each level ("level", L, ...). A save is new if new at any level; go_explore shares attention evenly across levels.
+    place_levels: int = 1
 
 
 def location(memory, settings):
@@ -129,7 +132,9 @@ def player_part(memory, settings):
 def travelled(start_place, scroll, settings):
     """Where dead reckoning starts a try: the exact position its start place stands for (see Settings.place_scheme)."""
     block = scroll_block(settings)
-    if start_place[0] != "scroll":
+    if start_place[0] == "level":
+        block, start_place = block << start_place[1], start_place[1:]
+    elif start_place[0] != "scroll":
         return scroll
     return tuple(b * block + s % block for b, s in zip(start_place[1:], scroll))
 
@@ -169,7 +174,7 @@ def room_of(place):
     """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
     if place[0] == "record":
         return place[1]
-    return place if place[0] in ("screen", "scroll") else tuple(place[:3])
+    return place if place[0] in ("screen", "scroll", "level") else tuple(place[:3])
 
 
 @dataclass
@@ -254,18 +259,25 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         if scrolling:
             scroll = emulator.scroll(state)
             position, previous_scroll = moved(position, previous_scroll, scroll, scroll_block(settings)), scroll
-            place = scroll_place(position, settings) + player_part(memory, settings) + _extras(emulator, settings).part(state, memory, carry)
+            probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
+            extra = _extras(emulator, settings).part(state, memory, carry, probe_block, position)
+            place = scroll_place(position, settings) + player_part(memory, settings) + extra
+            levels = [("level", level) + tuple(p // (scroll_block(settings) << level) for p in position)
+                      + tuple(v // (player_step(settings) << level) for v in (int(memory[int(b)]) for b in settings.player_bytes.split(",") if b))
+                      + extra for level in range(settings.place_levels)] if settings.place_levels > 1 else [place]
         elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
         else:
             place = hand_made_place(memory, settings)
         place += (zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ()
-        new = place not in known and place not in found
         length = start_path_length + step + 1
         held = holdings(memory, settings)
-        rivals = known.get(place, []) + ([(found[place][2], found[place][1])] if place in found else [])
-        if not any(beats(rival, (held, length)) for rival in rivals):
-            found[place] = (state, length, held)
+        new = False
+        for offered in (levels if scrolling else [place]):
+            new = new or (offered not in known and offered not in found)
+            rivals = known.get(offered, []) + ([(found[offered][2], found[offered][1])] if offered in found else [])
+            if not any(beats(rival, (held, length)) for rival in rivals):
+                found[offered] = (state, length, held)
         if new:
             gaps.append(stale + 1)
             stale = 0
@@ -292,7 +304,8 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             rare_values = []
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
-    return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),
+    probe_frames = carry["probe_frames"] if scrolling else 0  # probes are play too: they count toward the budget
+    return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP + probe_frames, gaps, bytes(pressed), zlib.crc32(start_state),
                    died)
 
 
