@@ -20,7 +20,7 @@ def _after(emulator, state, buttons, steps):
     return emulator.memory().astype(np.int16)
 
 
-def varied_saves(emulator, start_state, rng, count, turbo, steps=60):
+def varied_saves(emulator, start_state, rng, count, turbo, steps=300):
     """Saves spread around the start by random play, so the probe isn't fooled by one spot (e.g. a wall)."""
     buttons, saves = actions(turbo), []
     for _ in range(count):
