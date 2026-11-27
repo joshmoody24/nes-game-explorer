@@ -57,7 +57,10 @@ class Settings:
     # together with the N different cells seen before it: look-alike screens are told apart by where play came from.
     # "scroll:B": dead reckoning. The camera's moves (hardware scroll, see Emulator.scroll) added up since the start,
     # in B-pixel blocks; B must divide 32 so a place plus the current scroll pins down the exact position again.
+    # "scroll:B,P" adds where the player is on screen: the controller-driven bytes (player_bytes) in steps of P.
     place_scheme: str = "hand"
+    # memory() indices of the player's position, comma-separated; go_explore fills it in (see contingency.py).
+    player_bytes: str = ""
 
 
 def location(memory, settings):
@@ -101,7 +104,18 @@ SCROLL_RANGE = (512, 480)  # the picture chip scrolls over two name tables each 
 
 
 def scroll_block(settings):
-    return int(settings.place_scheme.removeprefix("scroll:"))
+    return int(settings.place_scheme.removeprefix("scroll:").split(",")[0])
+
+
+def player_step(settings):
+    """P of a "scroll:B,P" scheme, or 0 when places don't include the player."""
+    parts = settings.place_scheme.removeprefix("scroll:").split(",")
+    return int(parts[1]) if len(parts) > 1 else 0
+
+
+def player_part(memory, settings):
+    step = player_step(settings)
+    return tuple(int(memory[int(b)]) // step for b in settings.player_bytes.split(",") if b) if step else ()
 
 
 def travelled(start_place, scroll, settings):
@@ -133,7 +147,7 @@ def scroll_place(position, settings):
 def place_of_state(emulator, state, settings):
     """The place of a stored state with no history; a screen scheme draws one more frame from it to see the picture."""
     if settings.place_scheme.startswith("scroll:"):
-        return scroll_place(emulator.scroll(state), settings)
+        return scroll_place(emulator.scroll(state), settings) + player_part(emulator.view(state), settings)
     if not uses_picture(settings):
         return hand_made_place(emulator.view(state), settings)
     emulator.load(state)
@@ -229,7 +243,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         if scrolling:
             scroll = emulator.scroll(state)
             position, previous_scroll = moved(position, previous_scroll, scroll, scroll_block(settings)), scroll
-            place = scroll_place(position, settings)
+            place = scroll_place(position, settings) + player_part(memory, settings)
         elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
         else:
