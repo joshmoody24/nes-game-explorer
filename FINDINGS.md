@@ -1305,3 +1305,6 @@ the state-level danger prediction to choose which states to keep and explore fro
   at 50 for 9 chunks with a new layer every other chunk, then 55, 57, and Norfair at chunk 12. Total for the stretch
   (ac-multi + multi2 + multi3): ~234M frames, vs ~216M for the hand-guided chain (honest9/9b + ridley-exit layers).
   Same cost, zero hand picks. Continuing toward Brinstar.
+- **No-picking chain, end of night** (ac-multi3 finished 30 chunks): Norfair, 90 rooms, not yet Brinstar. Rooms keep
+  climbing slowly (63 -> 90 over 18 chunks, ~108M frames). Whole stretch from the post-Ridley save: ~340M laptop
+  frames, zero hand picks. Next: resume it (CONTINUE_RUN=ac-multi3/c29) on the unit, where it runs ~7x faster.
