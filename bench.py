@@ -49,6 +49,9 @@ if __name__ == "__main__":
         began = time.time()
         subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", str(MINUTES), "--seed", str(seed), "--start-state", start, "--stop-when", wall, "--max-frames", str(MAX_FRAMES)] + args + familiar,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not (Path("runs") / run / "checkpoint.pkl.z").exists():
+            print(f"{name} seed {seed} {wall}: crashed (no checkpoint; e.g. killed at the memory cap)", flush=True)
+            continue
         states = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))["states"]
         first = next((i for i, s in enumerate(states) if test(emulator.view(s))), None)
         frames = int(np.load(Path("runs") / run / "segments.npz")["frames"].sum())
