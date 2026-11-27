@@ -4,3 +4,7 @@ runs/
 result
 cache/
 videos/
+heuristic/runs/
+heuristic/features/
+*.state
+*.nes
