@@ -1356,3 +1356,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   3 to 6 steps of pressing. Samus x ($30E) ranks 2nd of 2048+8192 bytes for right/left, Samus y ($30D) joint 1st for
   jump; the bytes beside them (81, 82, 6-9) look like working copies. Without the "grows" test the controller byte
   and facing flags crowd the top. Plan: probe at run start, add the top bytes per axis (in blocks) to scroll places.
+- **Place bench seeds 1-3** (4 walls, 10M cap): hand 10/12, scroll:16 6/12, scroll:8 5/12 (2-5x hand frames when
+  they pass; scroll:8 broke ridley-door once, 6.0M). Seed 1 had flattered scroll.
+- **Camera moves from pixels alone** (`python -m checks.pixel_scroll_check runs/honest10e/checkpoint.pkl.z`): matching
+  the column and row brightness profiles of consecutive frames gives the hardware scroll change exactly in 98% of
+  1,387 moving steps (100% of 4,474 still ones). So dead reckoning needs no NES hardware: only "how did the view move".
+- **Contingency player bytes in places** (`scroll:B,P`, 15f5f5e): the run-start probe picks Samus x/y (781/782) or
+  their copies from 3 of 4 starts (lava edge picks two other bytes for the across axis). P=8 is too fine (1-3.6K
+  places per 300 tries vs hand 177); benching P=16/32.
