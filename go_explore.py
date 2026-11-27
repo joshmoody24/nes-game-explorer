@@ -45,6 +45,7 @@ class Archive:
     states: list = field(default_factory=list)
     times_chosen: list = field(default_factory=list)
     familiar: dict = field(default_factory=dict)  # location -> choices earlier runs spent there (--familiar)
+    worn_rooms: frozenset = frozenset()  # rooms history wore out (--skip-worn): new saves there aren't kept
     parents: list = field(default_factory=list)  # archive index of the visit whose segment found this one (-1: start)
     # Buttons (indices into ACTIONS) from the start state to the kept state: every visit has a replayable
     # route. None for places resumed from an older run, which didn't keep paths.
@@ -79,6 +80,8 @@ class Archive:
 
     def offer(self, place, state, held, parent=-1, path=None):
         """Keeps the visit unless one already kept there beats it. Returns "new" (new place), "better" or None."""
+        if self.worn_rooms and place[0] not in ("record", "climb") and tuple(place[:3]) in self.worn_rooms and place not in self.index:
+            return None
         visit = (held, UNKNOWN_PATH_LENGTH if path is None else len(path))
         visits = self.index.get(place, [])
         if any(self.active[i] and beats((self.holdings[i], self.path_length(i)), visit) for i in visits):
@@ -160,8 +163,16 @@ class Archive:
         place_of = np.array([self.place_numbers[choice_group(p)] for p in self.places]) if len(self.place_numbers) else None
         visits_per_place = np.bincount(place_of, weights=active)
         chosen = np.array(self.times_chosen)
-        weights = (self.sampled_rates(chosen) if self.selection != "classic" else 1 / np.sqrt(1 + chosen)) * active
+        weights = (self.sampled_rates(chosen) if self.selection.startswith("thompson") else 1 / np.sqrt(1 + chosen)) * active
         weights = weights / np.maximum(visits_per_place[place_of], 1)
+        if self.selection == "rooms":
+            # Each room gets one share however many saves it holds, so a big explored area can't drown out the
+            # few rooms where progress is happening; the share fades with the tries the room has had.
+            rooms = {}
+            room_of = np.array([rooms.setdefault(p[1] if p[0] in ("record", "climb") else tuple(p[:3]), len(rooms)) for p in self.places])
+            room_total = np.bincount(room_of, weights=weights)
+            room_tries = np.bincount(room_of, weights=chosen)
+            weights = weights / np.maximum(room_total[room_of], 1e-12) / np.sqrt(1 + room_tries[room_of])
         # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
         weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
         if self.chooser_weight and self.chooser is not None:
@@ -295,6 +306,7 @@ def parse_arguments():
     parser.add_argument("--workers", type=int, default=18)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
+    parser.add_argument("--skip-worn", action="store_true", help="don't keep new saves in rooms history wore out (more than the median room's history)")
     parser.add_argument("--familiar", default="", help="runs whose choices count as already spent here: novelty is judged against all earlier experience, not just this run")
     parser.add_argument("--start-state", help="a file holding a save state to explore from, instead of power-on")
     parser.add_argument("--stop-at-item", help="diagnostic: stop once progress shows this item (e.g. \"long beam\")")
@@ -338,6 +350,15 @@ def prepare_run_dir(args, settings):
 LOCATION_SIZE = 5  # a hand-made place starts with (area, map y, map x, block x, block y)
 
 
+def worn_rooms(familiar, start_place):
+    """Rooms where history spent more than the median room did; the start's room never counts as worn."""
+    rooms = {}
+    for location, n in familiar.items():
+        rooms[location[:3]] = rooms.get(location[:3], 0) + n
+    median = float(np.median(list(rooms.values())))
+    return frozenset(r for r, n in rooms.items() if n > median and r != tuple(start_place[:3]))
+
+
 def familiar_counts(run_names, start, emulator):
     """Choices earlier runs spent at each location, so this run's novelty is judged against earlier experience.
     Only runs that began with the same permanent progress count: a new item or a beaten boss can open up places
@@ -372,6 +393,8 @@ def main():
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     archive.familiar = familiar_counts(args.familiar, start, emulator)
+    if args.skip_worn and archive.familiar:
+        archive.worn_rooms = worn_rooms(archive.familiar, hand_made_place(emulator.view(start), settings))
     progress = Progress()
     rng = np.random.default_rng(args.seed)
     frames = 0
