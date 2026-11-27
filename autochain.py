@@ -1,7 +1,8 @@
 """
 Layers without a human picking start saves: run short chunks; while each chunk finds at least one new room and at least
 as many as the one before, resume it; otherwise start a new layer. A new layer starts either from the newest
-room's best-held save (earlier layers become history), or with MULTISTART=1 from every save the stalled chunk found.
+room's best-held save (earlier layers become history), or with MULTISTART=1 from every save in the rooms the stalled
+layer discovered itself. Rooms it inherited are dropped: carrying them spent 91% of tries in an area already done.
 Usage: [CONTINUE_RUN=<run> CONTINUE_AFTER=<index>] python autochain.py <name> <start.state> <chunks> [go_explore options...]
 """
 import json, os, pickle, subprocess, sys, zlib
@@ -33,6 +34,12 @@ def discovery(place):
     return tuple(place[:4]) if place[0] == "record" else tuple(place[:3])
 
 
+def write_subset(run, saved, keep):
+    (Path("runs") / run).mkdir(parents=True, exist_ok=True)
+    subset = {k: [saved[k][i] for i in keep] for k in ("states", "places", "paths")}
+    (Path("runs") / run / "checkpoint.pkl.z").write_bytes(zlib.compress(pickle.dumps(subset)))
+
+
 def holdings_after_idle(emulator, state):
     """The hoarded bytes after standing still for 20 steps: a save about to lose them is worth less."""
     emulator.load(state)
@@ -59,6 +66,8 @@ if __name__ == "__main__":
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     history = [r for r in os.environ.get("FAMILIAR", "").split(",") if r]
     run, resume_after, previous_found, seen, layer = os.environ.get("CONTINUE_RUN"), int(os.environ.get("CONTINUE_AFTER", 0)), None, set(), 0
+    inherited = {room(p) for p in load(run)["places"][resume_after:]} if run else set()
+    seen = set(inherited)
     Path("cache/auto").mkdir(parents=True, exist_ok=True)
     for chunk in range(chunks):
         new_run = f"{name}/c{chunk:02d}"
@@ -78,10 +87,15 @@ if __name__ == "__main__":
         print(f"chunk {chunk}: {new_run} rooms {m['rooms']} areas {m['areas']} items {m['items']} bosses {m.get('bosses')} "
               f"| {found} new discoveries, {m['frames'] / 1e6:.0f}M frames{' | stall' if stalled else ''}", flush=True)
         if stalled and MULTISTART:
-            # The stalled run isn't history here: its newest saves ARE the new layer, and history would mark them worn.
+            # The stalled run isn't history here: its saves ARE the new layer, and history would mark them worn.
             layer += 1
-            print(f"  new layer {layer} from the {len(saved['states']) - carried} saves chunk {chunk} found", flush=True)
-            run, resume_after, previous_found, seen = new_run, carried, None, set()
+            discovered = now - inherited
+            keep = [i for i, p in enumerate(saved["places"]) if room(p) in discovered] or list(range(len(saved["states"])))
+            run = f"{name}/layer{layer}"
+            write_subset(run, saved, keep)
+            inherited = {room(saved["places"][i]) for i in keep}
+            print(f"  new layer {layer} from {len(keep)} saves in the {len(discovered)} rooms the last layer discovered", flush=True)
+            resume_after, previous_found, seen = 0, None, set(inherited)
         elif stalled:
             layer += 1
             history.append(new_run)
