@@ -1,12 +1,15 @@
 """
-Paired comparison of explorer configs on the wall benchmark, built for clean stats with few iterations:
+Paired comparison of explorer configs ("arms") against one baseline on the wall benchmark, built for clean stats with
+few iterations:
 - many 1-worker runs in parallel (each exactly reproducible), so cores buy independent samples, not one big run;
-- every config runs the same seeds, so seed s under A and under B start from the same random choices (pairing);
-- each run records frames to break its wall, or "more than the cap" (censored), not just pass/fail;
-- runs go in batches; after each, a bootstrap interval on the main number (walls broken, A minus B, per seed) decides
-  whether to stop: it excludes 0 (a winner), or fits inside +-MARGIN (no difference worth having), or MAX_BATCHES.
-Usage: python compare.py <name> "<config A args>" "<config B args>" [wall ...]
-Env: COMPARE_PARALLEL (runs at once, default 15), COMPARE_BATCH (seeds per batch, default 15), BENCH_MAX_FRAMES.
+- every arm runs the same seeds as the baseline, so seed s starts from the same random choices in both (pairing);
+- each run records frames to break its wall, or None for "more than the cap", not just pass/fail;
+- runs go in batches; after each, a bootstrap interval on walls broken per seed (arm minus baseline) settles an arm
+  when it excludes 0 (better / worse) or fits inside +-MARGIN (no difference worth having). An arm is only ever
+  written off (worse, or no difference) after MIN_SEEDS_TO_REJECT seeds, so luck can't kill an idea.
+Usage: python compare.py <name> "baseline=<args>" "arm1=<args>" ["arm2=<args>" ...] -- [wall ...]
+Env: COMPARE_PARALLEL (runs at once, default 15), COMPARE_BATCH (seeds per batch, default 15), COMPARE_MAX_BATCHES,
+BENCH_MAX_FRAMES (cap per wall run, default 2e6).
 """
 import json, os, pickle, subprocess, sys, zlib
 from concurrent.futures import ThreadPoolExecutor
@@ -23,23 +26,29 @@ BATCH = int(os.environ.get("COMPARE_BATCH", 15))
 MAX_BATCHES = int(os.environ.get("COMPARE_MAX_BATCHES", 4))
 MAX_FRAMES = int(float(os.environ.get("BENCH_MAX_FRAMES", 2e6)))
 MARGIN = 0.25  # walls per seed: a smaller difference isn't worth having
+MIN_SEEDS_TO_REJECT = 30
 COMMON = "--turbo --repeat-probability 0.99 --repeat-spread 0.09 --novel-values --keep-more 4217,263 --workers 1"
 
 
 def run_once(name, label, args, wall, seed):
-    """Frames to break wall from its start save, or None if not within MAX_FRAMES."""
+    """Frames to break wall from its start save, None if not within MAX_FRAMES, or "crashed"."""
     run = f"compare/{name}/{label}/{wall}/s{seed}"
-    start, _ = WALLS[wall]
+    directory = Path("runs") / run
+    cached = directory / "result.json"
+    if cached.exists():  # a rerun of the same comparison reuses finished runs (they are exactly reproducible)
+        return json.loads(cached.read_text())["frames"]
+    start, test = WALLS[wall]
     subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", "60", "--seed", str(seed), "--start-state", start,
                     "--stop-when", wall, "--max-frames", str(MAX_FRAMES)] + COMMON.split() + args.split(),
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "PYTHONHASHSEED": "0"})
-    directory = Path("runs") / run
     if not (directory / "checkpoint.pkl.z").exists():
         return "crashed"
-    test, emulator = WALLS[wall][1], Emulator(os.environ["QUICKNES_CORE"], ROM)
+    emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     states = pickle.loads(zlib.decompress((directory / "checkpoint.pkl.z").read_bytes()))["states"]
-    broke = any(test(emulator.view(s)) for s in states)
-    return int(np.load(directory / "segments.npz")["frames"].sum()) if broke else None
+    frames = int(np.load(directory / "segments.npz")["frames"].sum()) if any(test(emulator.view(s)) for s in states) else None
+    cached.write_text(json.dumps({"frames": frames}))
+    (directory / "checkpoint.pkl.z").unlink()  # the result is all a comparison needs; checkpoints are big
+    return frames
 
 
 def bootstrap(differences, rng, draws=10000):
@@ -47,39 +56,52 @@ def bootstrap(differences, rng, draws=10000):
     return np.percentile(means, [2.5, 97.5])
 
 
-def summary(results, labels, walls):
-    for label in labels:
-        cells = []
-        for wall in walls:
-            frames = [f for (l, w, s), f in results.items() if l == label and w == wall]
-            broke = sorted(f for f in frames if isinstance(f, int))
-            cells.append(f"{wall} {len(broke)}/{len(frames)}" + (f" med {np.median(broke) / 1e6:.2f}M" if broke else ""))
-        print(f"  {label}: " + " | ".join(cells), flush=True)
+def broken(frames):
+    return isinstance(frames, int)
 
 
 if __name__ == "__main__":
-    name, configs, walls = sys.argv[1], {"A": sys.argv[2], "B": sys.argv[3]}, sys.argv[4:] or list(WALLS)
-    print(f"{name}: A = '{configs['A']}' vs B = '{configs['B']}', walls {walls}, cap {MAX_FRAMES / 1e6:.1f}M frames", flush=True)
-    results, rng = {}, np.random.default_rng(0)
+    name, rest = sys.argv[1], sys.argv[2:]
+    split = rest.index("--") if "--" in rest else len(rest)
+    arms = dict(item.split("=", 1) for item in rest[:split])
+    walls = rest[split + 1:] or list(WALLS)
+    baseline = next(iter(arms))
+    print(f"{name}: baseline {baseline} vs {list(arms)[1:]}, walls {walls}, cap {MAX_FRAMES / 1e6:.1f}M frames", flush=True)
+    results, verdicts, rng = {}, {}, np.random.default_rng(0)
     for batch in range(MAX_BATCHES):
+        open_arms = [label for label in arms if label == baseline or label not in verdicts]
+        if open_arms == [baseline]:
+            break
         seeds = range(1 + batch * BATCH, 1 + (batch + 1) * BATCH)
-        jobs = [(label, wall, seed) for seed in seeds for wall in walls for label in configs]
+        jobs = [(label, wall, seed) for seed in seeds for wall in walls for label in open_arms]
         with ThreadPoolExecutor(PARALLEL) as pool:
-            for job, frames in zip(jobs, pool.map(lambda j: run_once(name, j[0], configs[j[0]], j[1], j[2]), jobs)):
+            for job, frames in zip(jobs, pool.map(lambda j: run_once(name, j[0], arms[j[0]], j[1], j[2]), jobs)):
                 results[job] = frames
-        all_seeds = sorted({s for _, _, s in results})
-        walls_broken = {label: np.array([sum(isinstance(results[(label, w, s)], int) for w in walls) for s in all_seeds])
-                        for label in configs}
-        difference = walls_broken["A"] - walls_broken["B"]
-        low, high = bootstrap(difference, rng)
-        print(f"after {len(all_seeds)} seeds: walls broken per seed A {walls_broken['A'].mean():.2f}, B {walls_broken['B'].mean():.2f}, "
-              f"A-B {difference.mean():+.2f} (95% {low:+.2f} to {high:+.2f})", flush=True)
-        summary(results, configs, walls)
+        print(f"--- after {seeds[-1]} seeds", flush=True)
+        for label in open_arms:
+            seen = sorted({s for l, _, s in results if l == label})
+            per_wall = []
+            for wall in walls:
+                got = [results[(label, wall, s)] for s in seen]
+                times = sorted(f for f in got if broken(f))
+                per_wall.append(f"{wall} {len(times)}/{len(got)}" + (f" med {np.median(times) / 1e6:.2f}M" if times else ""))
+            line = f"  {label}: " + " | ".join(per_wall)
+            if label != baseline:
+                difference = np.array([sum(broken(results[(label, w, s)]) for w in walls) -
+                                       sum(broken(results[(baseline, w, s)]) for w in walls) for s in seen])
+                low, high = bootstrap(difference, rng)
+                line += f" || vs {baseline}: {difference.mean():+.2f} walls/seed (95% {low:+.2f} to {high:+.2f})"
+                if low > 0:
+                    verdicts[label] = "better"
+                elif len(seen) >= MIN_SEEDS_TO_REJECT and high < 0:
+                    verdicts[label] = "worse"
+                elif len(seen) >= MIN_SEEDS_TO_REJECT and -MARGIN < low and high < MARGIN:
+                    verdicts[label] = "no difference"
+                if label in verdicts:
+                    line += f"  => {verdicts[label]}"
+            print(line, flush=True)
         Path(f"runs/compare/{name}/results.json").write_text(json.dumps({f"{l}|{w}|{s}": f for (l, w, s), f in results.items()}))
-        if low > 0 or high < 0:
-            print(f"verdict: {'A' if low > 0 else 'B'} breaks more walls", flush=True); break
-        if -MARGIN < low and high < MARGIN:
-            print(f"verdict: no difference bigger than {MARGIN} walls per seed", flush=True); break
-    else:
-        print("verdict: undecided after the batch limit", flush=True)
+    for label in arms:
+        if label != baseline:
+            print(f"verdict {label}: {verdicts.get(label, 'undecided')}", flush=True)
     print("COMPARE DONE", flush=True)

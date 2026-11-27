@@ -121,6 +121,7 @@ class Emulator:
         self._cartridge_slice = slice(blocks["SRAM"][0], sum(blocks["SRAM"]))
         self._nametable_slice = slice(blocks["NTAB"][0], sum(blocks["NTAB"]))
         self._ppu_start = blocks["PPUR"][0]
+        self._blocks = blocks
 
     def _environment(self, command, data):
         if command == ENVIRONMENT_GET_CAN_DUPE:
@@ -185,6 +186,11 @@ class Emulator:
     def nametable(self, state=None):
         """The background tile layout (2 KB), from a save state or the current one."""
         return (state or self.save())[self._nametable_slice]
+
+    def block(self, state, name):
+        """One named block of a save state (e.g. "SPRT" sprites, "CHRR" tile graphics, "MAPR" mapper registers)."""
+        start, size = self._blocks[name]
+        return state[start:start + size]
 
     def scroll(self, state):
         """The picture chip's scroll as (x 0-511, y 0-479), read from its registers: the same hardware in every NES

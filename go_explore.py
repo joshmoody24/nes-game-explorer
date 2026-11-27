@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from emulator import Emulator
+import place_extras
 from contingency import player_bytes
 from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings, place_of_state, player_step
 from metroid import permanent_progress, start_game
@@ -330,6 +331,11 @@ def main():
         found = player_bytes(emulator, start, np.random.default_rng(args.seed), settings.turbo)
         settings = dataclasses.replace(settings, player_bytes=",".join(map(str, found)))
         print(f"player bytes (by contingency): {settings.player_bytes}", flush=True)
+    if settings.place_extras:
+        share = np.load("cache/poke_share.npy") if settings.byte_picker == "poke" else None
+        learned = place_extras.pick(emulator, start, np.random.default_rng(args.seed), settings, share)
+        settings = dataclasses.replace(settings, reference_state=args.start_state or "", **learned)
+        print(f"place add-ons {settings.place_extras}: {learned}", flush=True)
     run_dir = prepare_run_dir(args, settings)
     if args.resume:
         archive = resumed_archive(args.resume, settings, emulator, args.resume_after)

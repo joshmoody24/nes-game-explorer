@@ -9,6 +9,7 @@ so keeping a worker in sync just means sending the updates logged since its last
 
 import os
 import zlib
+from pathlib import Path
 from dataclasses import dataclass
 from multiprocessing import get_context
 from multiprocessing.connection import wait
@@ -18,6 +19,7 @@ import numpy as np
 from controls import FRAMES_PER_STEP, TURBO_FROM_ENVIRONMENT, actions
 from emulator import Emulator
 from metroid import ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES, ROOM_X, ROOM_Y, area_of, at
+from place_extras import Extras
 from progress import Progress
 
 ROM = "roms/metroid.nes"
@@ -61,6 +63,12 @@ class Settings:
     place_scheme: str = "hand"
     # memory() indices of the player's position, comma-separated; go_explore fills it in (see contingency.py).
     player_bytes: str = ""
+    # Experimental add-ons to scroll places, comma-separated (see place_extras.py), and what they learned at run start.
+    place_extras: str = ""
+    byte_picker: str = "sticky"
+    extra_bytes: str = ""
+    common_tiles: str = ""
+    reference_state: str = ""  # file of the run's start save (the fuzzy add-on hashes RAM relative to it)
 
 
 def location(memory, settings):
@@ -147,7 +155,9 @@ def scroll_place(position, settings):
 def place_of_state(emulator, state, settings):
     """The place of a stored state with no history; a screen scheme draws one more frame from it to see the picture."""
     if settings.place_scheme.startswith("scroll:"):
-        return scroll_place(emulator.scroll(state), settings) + player_part(emulator.view(state), settings)
+        extras = Extras(emulator, settings, Path(settings.reference_state).read_bytes() if settings.reference_state else state)
+        return (scroll_place(emulator.scroll(state), settings) + player_part(emulator.view(state), settings)
+                + extras.part(state, emulator.view(state), extras.start(("start",))))
     if not uses_picture(settings):
         return hand_made_place(emulator.view(state), settings)
     emulator.load(state)
@@ -215,6 +225,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     if scrolling:
         previous_scroll = emulator.scroll(start_state)
         position = travelled(start_place, previous_scroll, settings)
+        carry = _extras(emulator, settings).start(start_place)
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
@@ -243,7 +254,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         if scrolling:
             scroll = emulator.scroll(state)
             position, previous_scroll = moved(position, previous_scroll, scroll, scroll_block(settings)), scroll
-            place = scroll_place(position, settings) + player_part(memory, settings)
+            place = scroll_place(position, settings) + player_part(memory, settings) + _extras(emulator, settings).part(state, memory, carry)
         elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
         else:
@@ -283,6 +294,17 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             progress.see(emulator.memory(state), emulator.nametable(state))
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),
                    died)
+
+
+_worker_extras = None  # per worker process: the place add-ons (they precompute weights once)
+
+
+def _extras(emulator, settings):
+    global _worker_extras
+    if _worker_extras is None:
+        reference = Path(settings.reference_state).read_bytes() if settings.reference_state else emulator.save()
+        _worker_extras = Extras(emulator, settings, reference)
+    return _worker_extras
 
 
 def worker(connection, settings, seed, index):
