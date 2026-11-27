@@ -53,9 +53,6 @@ class Archive:
     deaths: list = field(default_factory=list)  # segments started from each visit that ended in game over
     productive: list = field(default_factory=list)  # segments from each visit that found a new place
     cached_weights: tuple = None  # (archive size, choice probabilities, uses) reused by choose
-    # The locations each visit's lineage passed through, snapshotted when the visit was kept (parent links
-    # can loop after slot reuse; these can't). Kept only when exploring with a refill (to pay back cheats).
-    routes: list = field(default_factory=list)
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
@@ -65,7 +62,7 @@ class Archive:
 
     def offer(self, place, state, held, parent=-1, path=None):
         """Keeps the visit unless one already kept there beats it. Returns "new" (new place), "better" or None."""
-        if self.worn_rooms and place[0] not in ("record", "climb") and tuple(place[:3]) in self.worn_rooms and place not in self.index:
+        if self.worn_rooms and place[0] != "record" and tuple(place[:3]) in self.worn_rooms and place not in self.index:
             return None
         visit = (held, UNKNOWN_PATH_LENGTH if path is None else len(path))
         visits = self.index.get(place, [])
@@ -86,7 +83,7 @@ class Archive:
         self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
-        self.times_chosen.append(self.familiar.get(place[:LOCATION_SIZE], 0) if place[0] not in ("record", "climb") else 0)
+        self.times_chosen.append(self.familiar.get(place[:LOCATION_SIZE], 0) if place[0] != "record" else 0)
         self.parents.append(parent)
         self.paths.append(path)
         self.holdings.append(held)
@@ -126,12 +123,7 @@ GAIN_KEYS = ("items", "energy tanks", "max missiles", "bosses")  # progress fiel
 def choice_group(place):
     """What choose() splits weight over: a room's record places (Settings.novel_values) count as one place, so
     progress inside a fight is explored without crowding out the map."""
-    return place[:2] if place[0] in ("record", "climb") else place
-
-
-def place_location(place):
-    """The location part of a hand-made place (area, room, position), as in graph.location."""
-    return tuple(place[:5])
+    return place[:2] if place[0] == "record" else place
 
 
 def stalled(history, now, window_seconds):
@@ -155,7 +147,7 @@ def resumed_archive(run_name, settings, emulator):
     paths = saved.get("paths") or [None] * len(saved["states"])
     for state, place, path in zip(saved["states"], places, paths):
         memory = emulator.view(state)
-        archive.offer(place if place is not None and place[0] in ("record", "climb") else hand_made_place(memory, settings),
+        archive.offer(place if place is not None and place[0] == "record" else hand_made_place(memory, settings),
                       state, holdings(memory, settings), path=path)
     return archive
 
@@ -351,13 +343,6 @@ def main():
                         if stop_test and stop_test(emulator.view(state)):
                             print(f"stopping: --stop-when {args.stop_when} passed after {time.perf_counter() - started:.0f}s", flush=True)
                             deadline = time.perf_counter()
-                        if settings.refill:
-                            while len(archive.routes) < len(archive.states):
-                                archive.routes.append(())
-                            here = place_location(place)
-                            parent_route = archive.routes[segment.start] if segment.start < len(archive.routes) else ()
-                            archive.routes[archive.last_slot] = (parent_route if parent_route[-1:] == (here,)
-                                                                 else parent_route + (here,))
                 new_places = outcomes.count("new")
                 archive.deaths[segment.start] += segment.died
                 archive.productive[segment.start] += new_places > 0

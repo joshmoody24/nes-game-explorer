@@ -7,7 +7,6 @@ reached by a shorter path. The main process keeps an append-only log of (place, 
 so keeping a worker in sync just means sending the updates logged since its last task.
 """
 
-import functools
 import os
 import zlib
 from dataclasses import dataclass
@@ -40,21 +39,12 @@ class Settings:
     # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
     # in random play. Below 1, random play wastes missiles less often.
     select_weight: float = 1.0
-    # Diagnostic ceiling ("what if resources were free?"): comma-separated "index:value" memory edits applied to
-    # every segment's start state, e.g. refilling ammo and health. Empty: off.
-    refill: str = ""
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
     # keeps just the shortest path.
     keep_more: str = ""
     block_size: int = 32  # pixels per side of the position blocks that split a room into places
-    # Save-scum on damage: bytes of one number, most significant first (e.g. "263,262"); a try ends, like a
-    # death, the moment that number drops, so nothing reached after taking damage is kept.
-    no_damage: str = ""
-    # Extra bytes that split places, "index:bucket,..." (e.g. an enemy's hit points, so damage dealt counts as
-    # progress the archive keeps). Diagnostic until such bytes are found automatically.
-    place_bytes: str = ""
     # Diagnostic focus: map cells "y,x;y,x;..." a try must stay in (leaving ends it like a death). Empty: off.
     stay: str = ""
     # Add a fingerprint of the background tile layout to places, so scenery damage (e.g. a barrier being shot
@@ -65,13 +55,9 @@ class Settings:
     # that has set records both ways in a room is not a progress counter; one counts only from its PROGRESS_RECORDS-th
     # one-way record on.
     novel_values: bool = False
-    # Keep a save whenever the player reaches a new furthest point in a room in any direction (8-pixel steps), as
-    # its own place: exits sit at a room's extremes, and coarse position blocks miss getting closer to them.
-    climb_records: bool = False
     # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
     # you were heading is usually the way on), instead of a random one.
     momentum: float = 0.0
-    generic_places: str = ""  # "room", "position" or "both": parts of location from bytes found by generic_places.py
     # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
     current_missiles: bool = False
     # Hand-given knowledge, for diagnosis: split places by energy band, so healthy and nearly dead versions
@@ -79,32 +65,15 @@ class Settings:
     health_buckets: bool = False
 
 
-@functools.lru_cache(maxsize=1)
-def found_place_bytes():
-    found = np.load("cache/generic-places.npz")
-    return found["scene"], found["position"]
-
-
 def location(memory, settings):
     """Which room and roughly where in it."""
-    found = settings.generic_places
-    if found:
-        scene, position = found_place_bytes()
-    room = ((zlib.crc32(memory.take(scene).tobytes()),) if found in ("room", "both")
-            else (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X])))
-    where = (tuple(int(memory[b]) // bucket for b, bucket in position) if found in ("position", "both")
-             else (int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size))
-    return room + where
-
-
-def extra_place(memory, settings):
-    return tuple(int(memory[int(index)]) // int(bucket or 1)
-                 for index, _, bucket in (item.partition(":") for item in settings.place_bytes.split(",") if item))
+    return (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]),
+            int(memory[ROOM_X]) // settings.block_size, int(memory[ROOM_Y]) // settings.block_size)
 
 
 def hand_made_place(memory, settings):
-    """Where (see location), any extra place bytes, and progress counters."""
-    return (*location(memory, settings), *extra_place(memory, settings),
+    """Where (see location) and progress counters."""
+    return (*location(memory, settings),
             int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5,
             int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None,
             energy_band(energy_of(memory)) if settings.health_buckets else None)
@@ -150,35 +119,16 @@ RARE_CHANGE_RATE = 0.002  # bytes changing on fewer steps than this count toward
 WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
 _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
-_extremes = {}  # per worker process: (room, axis) -> (lowest, highest) position step reached
-CLIMB_STEP = 8  # pixels per height step for Settings.climb_records
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
-
-
-def refilled(emulator, state, edits):
-    """state with the "index:value" memory edits applied."""
-    pairs = [tuple(int(x, 0) for x in item.split(":")) for item in edits.split(",") if item]
-    edited = bytearray(state)
-    for offset, (_, value) in zip(emulator.state_offsets([index for index, _ in pairs]), pairs):
-        edited[offset] = value
-    return bytes(edited)
-
-
-def guarded_value(memory, indices):
-    return tuple(int(memory[i]) for i in indices)
 
 
 def explore(emulator, rng, settings, known, start, start_state, start_path_length, last_action=None):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched, _records
     died = False
-    if settings.refill:
-        start_state = refilled(emulator, start_state, settings.refill)
     emulator.load(start_state)
-    guarded = [int(b) for b in settings.no_damage.split(",") if b]
     stay = {tuple(int(v) for v in cell.split(",")) for cell in settings.stay.split(";") if cell}
     rare_values, changed = [], None
-    guarded_before = guarded_value(emulator.view(start_state), guarded)
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
     weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
@@ -209,12 +159,9 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     # Only isolated changes: a hit lowers hit points in one jump; moving things change step after step.
                     rare_values = [(int(b), int(full_memory[b])) for b in rare if not changed_before[b]]
         previous_memory = full_memory
-        if (memory[GAME_MODE] == GAME_OVER or (guarded and guarded_value(memory, guarded) < guarded_before)
-                or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay)):
+        if (memory[GAME_MODE] == GAME_OVER or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay)):
             died = True
             break
-        if guarded:
-            guarded_before = guarded_value(memory, guarded)
         place = hand_made_place(memory, settings) + ((zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ())
         new = place not in known and place not in found
         length = start_path_length + step + 1
@@ -246,16 +193,6 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                         found[value_place] = (state, length, held)
                 _records[(room, b)] = (min(low, value), max(high, value), went_down, went_up, count)
             rare_values = []
-        if settings.climb_records:
-            room = (area_of(memory), int(memory[MAP_Y]), int(memory[MAP_X]))
-            # Exits sit at a room's extremes: a new furthest point in any direction is progress.
-            for axis, value in (("x", int(memory[ROOM_X]) // CLIMB_STEP), ("y", int(memory[ROOM_Y]) // CLIMB_STEP)):
-                low, high = _extremes.get((room, axis), (value, value))
-                if value < low or value > high:
-                    climb_place = ("climb", room, axis, value)
-                    if climb_place not in known and climb_place not in found:
-                        found[climb_place] = (state, length, held)
-                _extremes[(room, axis)] = (min(low, value), max(high, value))
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),
