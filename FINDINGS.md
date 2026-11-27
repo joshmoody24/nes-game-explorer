@@ -1344,3 +1344,10 @@ the state-level danger prediction to choose which states to keep and explore fro
   ("loopy t": coarse x/y, nametable, fine y), byte 10 = fine x. Decoded scroll matches Metroid's own $FD/$FC 73% (x)
   / 87% (y) of 3077 saves (misses likely frame timing). Basis for a human-like place: stretch between screen
   transitions + scroll travelled within it (dead reckoning), with the previous stretch as context.
+- **Plain screens fail at every fixed grid** (seed 1, 4 walls hand breaks): best screen:8,6,4 broke 1/4 (ridley-exit
+  2.6M vs hand 0.7M); context variants and 11x8x4 broke 0/4. Place counts swing 589 -> 14,077 between walls for one
+  setting: a fixed grid is coarse in one area, fine in another.
+- **Dead reckoning (scroll:B) is the first generic scheme that works** (seed 1): lava 1.4M (B=8; hand 0.9M),
+  ridley-exit 1.1M (B=16; hand 0.7M), missile-door 8.9M (B=16; hand 5.7M); ridley-door never (hand 1.1M). Place
+  counts stay sane (640-12K). Missing: where the player is on screen (height/aim) - next, find player-position bytes
+  by contingency (which bytes respond to the controller).
