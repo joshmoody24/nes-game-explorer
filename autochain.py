@@ -2,7 +2,7 @@
 Layers without a human picking start saves: run short chunks; while each chunk makes at least as many new discoveries
 (rooms, records) as the one before, resume it; otherwise start a new layer. A new layer starts either from the newest
 room's best-held save (earlier layers become history), or with MULTISTART=1 from every save the stalled chunk found.
-Usage: python autochain.py <name> <start.state> <chunks> [go_explore options...]
+Usage: [CONTINUE_RUN=<run> CONTINUE_AFTER=<index>] python autochain.py <name> <start.state> <chunks> [go_explore options...]
 """
 import json, os, pickle, subprocess, sys, zlib
 from pathlib import Path
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     name, start, chunks, extra = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4:]
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     history = [r for r in os.environ.get("FAMILIAR", "").split(",") if r]
-    run, resume_after, previous_found, seen, layer = None, 0, None, set(), 0
+    run, resume_after, previous_found, seen, layer = os.environ.get("CONTINUE_RUN"), int(os.environ.get("CONTINUE_AFTER", 0)), None, set(), 0
     Path("cache/auto").mkdir(parents=True, exist_ok=True)
     for chunk in range(chunks):
         new_run = f"{name}/c{chunk:02d}"
