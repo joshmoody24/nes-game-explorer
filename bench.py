@@ -12,6 +12,7 @@ from explorers import ROM
 from metroid import MAP_X, MAP_Y, at
 
 MINUTES = float(os.environ.get("BENCH_MINUTES", 3.0))
+MAX_FRAMES = int(float(os.environ.get("BENCH_MAX_FRAMES", 0)))  # e.g. 3e6 (about 14 hours of play); 0 = time budget only
 DEFAULT_ARGS = "--keep-more 4217,263 --repeat-probability 0.99 --repeat-spread 0.09 --novel-values --workers 20"
 brinstar = lambda v: (int(v[0x74]) or 0x10) == 0x10
 cell = lambda v: (int(v[MAP_Y]), int(v[MAP_X]))
@@ -46,7 +47,7 @@ if __name__ == "__main__":
         run = f"bench/{name}/s{seed}/{wall}"
         familiar = ["--familiar", HISTORY[wall]] if HISTORY[wall] and os.environ.get("BENCH_HISTORY", "1") == "1" else []
         began = time.time()
-        subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", str(MINUTES), "--seed", str(seed), "--start-state", start, "--stop-when", wall] + args + familiar,
+        subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", str(MINUTES), "--seed", str(seed), "--start-state", start, "--stop-when", wall, "--max-frames", str(MAX_FRAMES)] + args + familiar,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         states = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))["states"]
         first = next((i for i, s in enumerate(states) if test(emulator.view(s))), None)

@@ -308,6 +308,7 @@ def parse_arguments():
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
     parser.add_argument("--skip-worn", action="store_true", help="don't keep new saves in rooms history wore out (more than the median room's history)")
     parser.add_argument("--stop-when", help="a bench.py wall name: stop as soon as a new save passes that wall's success test")
+    parser.add_argument("--max-frames", type=int, default=0, help="stop after this many emulated frames (a budget that means the same on any machine); 0 = no limit")
     parser.add_argument("--segments", type=int, default=0, help="stop after this many tries (for exact before/after comparisons); 0 = no limit")
     parser.add_argument("--familiar", default="", help="runs whose choices count as already spent here: novelty is judged against all earlier experience, not just this run")
     parser.add_argument("--start-state", help="a file holding a save state to explore from, instead of power-on")
@@ -441,7 +442,7 @@ def main():
     started = last_log = last_checkpoint = time.perf_counter()
     first_line = None  # the first metrics line, the baseline for --stop-at-gain
     deadline = started + args.minutes * 60
-    segments_done = 0
+    segments_done = frames_done = 0
     stop_test = None
     if args.stop_when:
         from bench import WALLS
@@ -452,6 +453,10 @@ def main():
         while time.perf_counter() < deadline:
             for worker_index, segment in explorers.finished():
                 segments_done += 1
+                frames_done += segment.frames
+                if args.max_frames and frames_done >= args.max_frames:
+                    deadline = time.perf_counter()
+                    break
                 if args.segments and segments_done >= args.segments:
                     deadline = time.perf_counter()
                     break
