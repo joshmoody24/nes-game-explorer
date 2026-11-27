@@ -1267,3 +1267,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   0.75-0.78 for the first success itself (no hindsight); zlib novelty 0.50-0.57 (stones are old hubs, not novel
   states). Note --fertility (children) already lost a live race; to race: milder descendants weight, and
   generations-since-scenery-change.
+- **Learned step-distance model** (heuristic/distance/; 161K replayed states from 48 fresh bench runs; inputs: 3,430
+  bytes that vary but aren't timers, value + "differs from usual"; MLP 6860-512-256-32, distance trained to log(1+steps
+  apart), 156 s on CPU). Held-out distance correlation 0.94. Rooms: 92-95% purity at 5-10 places per room, but an
+  untrained random encoder (90-94%) and PCA of the raw inputs (92-95%) do as well on these ~8-room runs: no gain.
+  Stepping stones: every learned novelty score at or below chance (0.32-0.55); even a cheat (closeness to the actual
+  first success) only 0.65 - stones' siblings are just as close. Not wired in. The frontier isn't distance/novelty.
