@@ -17,8 +17,7 @@ import numpy as np
 
 from controls import ACTIONS, FRAMES_PER_STEP
 from emulator import Emulator, button_mask
-from metroid import (CURRENT_MISSILES, ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES,
-                     ROOM_X, ROOM_Y, area_of, at, energy_of)
+from metroid import ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES, ROOM_X, ROOM_Y, area_of, at
 from progress import Progress
 
 ROM = "roms/metroid.nes"
@@ -58,11 +57,6 @@ class Settings:
     # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
     # you were heading is usually the way on), instead of a random one.
     momentum: float = 0.0
-    # Hand-given knowledge, for diagnosis: count current missiles, not just the maximum, as part of a place.
-    current_missiles: bool = False
-    # Hand-given knowledge, for diagnosis: split places by energy band, so healthy and nearly dead versions
-    # of the same spot are kept separately.
-    health_buckets: bool = False
 
 
 def location(memory, settings):
@@ -74,16 +68,7 @@ def location(memory, settings):
 def hand_made_place(memory, settings):
     """Where (see location) and progress counters."""
     return (*location(memory, settings),
-            int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5,
-            int(memory[at(CURRENT_MISSILES)]) if settings.current_missiles else None,
-            energy_band(energy_of(memory)) if settings.health_buckets else None)
-
-
-ENERGY_BANDS = (5, 15, 30)  # uneven: the difference between 2 and 12 energy matters more than 52 vs 62
-
-
-def energy_band(energy):
-    return sum(energy >= edge for edge in ENERGY_BANDS)
+            int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5)
 
 
 @dataclass
