@@ -2,7 +2,8 @@
 Layers without a human picking start saves: run short chunks; while each chunk finds at least one new room and at least
 as many as the one before, resume it; otherwise start a new layer. A new layer starts either from the newest
 room's best-held save (earlier layers become history), or with MULTISTART=1 from every save in the rooms the stalled
-layer discovered itself. Rooms it inherited are dropped: carrying them spent 91% of tries in an area already done.
+layer discovered first, in the whole chain. Older rooms are dropped: carrying them spent 91% of tries in an area
+already done.
 Usage: [CONTINUE_RUN=<run> CONTINUE_AFTER=<index>] python autochain.py <name> <start.state> <chunks> [go_explore options...]
 """
 import json, os, pickle, subprocess, sys, zlib
@@ -93,7 +94,7 @@ if __name__ == "__main__":
             keep = [i for i, p in enumerate(saved["places"]) if room(p) in discovered] or list(range(len(saved["states"])))
             run = f"{name}/layer{layer}"
             write_subset(run, saved, keep)
-            inherited = {room(saved["places"][i]) for i in keep}
+            inherited |= now  # every room the chain has ever seen; walking back into old rooms isn't discovery
             print(f"  new layer {layer} from {len(keep)} saves in the {len(discovered)} rooms the last layer discovered", flush=True)
             resume_after, previous_found, seen = 0, None, set(inherited)
         elif stalled:
