@@ -1313,3 +1313,10 @@ the state-level danger prediction to choose which states to keep and explore fro
   same rooms. Note "rooms" counts only the current layer's archive, so it can't grow once a layer covers the area.
   Open question for next time: is it genuinely stuck (which Norfair wall?), or is the stall-and-restart loop itself
   wasting the compute? Cheap check: map which cells the layers reach vs the known route to Brinstar, offline.
+- **Why the no-picking chain stalled in Norfair** (offline check vs honest10e, which went Norfair -> Brinstar):
+  the chain reached the Norfair shaft at (19,30) but never (18,30), the next cell on honest10e's route up. Its last
+  chunk spent 91% of tries (15,194 of 16,738) in Ridley's lair, an area already done, because a multi-start layer
+  carried every save, and only 0.7% at the shaft, from saves with 0 tanks and 0-2 missiles. Diagnostic: resume only
+  its 1,409 Norfair saves -> (18,30) reached in 3 min / 5.8M frames (the chain: never, in ~230M). So the "wall" was
+  wasted attention. General fix (31b78e0): a new layer keeps only saves in rooms the stalled layer discovered
+  itself. Testing from the post-Ridley save (ac-front).
