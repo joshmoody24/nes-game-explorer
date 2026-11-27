@@ -1204,3 +1204,16 @@ the state-level danger prediction to choose which states to keep and explore fro
   chunks, turbo) farmed to 19-21 missiles while wandering Brinstar, stalled with the column-11 shaft topping out in
   row 3; a layer from the highest healthy column-11 save with >= 5 missiles (3 energy!) went up, left along row 2,
   through the statue room and into Tourian within 3 minutes (tourian-approach).
+- **Uncheated chain through Tourian to the Zebetite room.** Missiles were the bottleneck after the statue room
+  (every Tourian save had 0-6). Random play wastes some (0.8-0.9 missiles per 100-step try in a quiet room; missile
+  mode on 21-33% of the time) but the main cost is the Metroids along row 7. Josh's point held: **killing Metroids
+  drops lots of missiles** - a 3-minute layer from an 18-missile save in the first shaft reached 80 missiles, and a
+  layer near Mother Brain went back up the column-10 shaft and farmed to 150. The orange door at (7,9) -> (7,10) is
+  the 10-missile door; past it the column-10 shaft drops to row 11 and the corridor leads left to the Zebetite room
+  (11,4) (nesmaps Tourian.png: image col 0 = map col 1, row 0 = row 3). pick_layer.py now picks layer starts (healthy,
+  best missiles/30 + energy/300 balance) after several bad hand picks (1-5 energy).
+- **Zebetites: current wall.** Mother Brain status 0 in every save. Runs stop at the room's left part; "(11,3)" saves
+  were camera scroll. Missiles fire about one per 8 steps (one in flight at a time; turbo does not speed them up),
+  Rinkas take ~30 energy per 24-30 steps. 120 steps of scripted fire at the first Zebetite: 11 missiles hit, 60
+  energy lost, Zebetite still standing. Race, 3 min x 10 workers, background fingerprint (--place-nametable) on vs
+  off: neither got past. absx() is unreliable in this room (x=1 saves are at the right door).
