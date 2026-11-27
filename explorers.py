@@ -16,7 +16,7 @@ from multiprocessing.connection import wait
 import numpy as np
 
 from controls import FRAMES_PER_STEP, TURBO_FROM_ENVIRONMENT, actions
-from emulator import Emulator, button_mask
+from emulator import Emulator
 from metroid import ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES, ROOM_X, ROOM_Y, area_of, at
 from progress import Progress
 
@@ -36,9 +36,6 @@ class Settings:
     # Each segment lowers its repeat probability by a random amount up to this, so some segments jitter: tapping
     # a button many times in a row (firing several shots) is near impossible when presses are long holds.
     repeat_spread: float = 0.0
-    # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
-    # in random play. Below 1, random play wastes missiles less often.
-    select_weight: float = 1.0
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
@@ -55,9 +52,6 @@ class Settings:
     # that has set records both ways in a room is not a progress counter; one counts only from its PROGRESS_RECORDS-th
     # one-way record on.
     novel_values: bool = False
-    # Chance a try starts by continuing the last button that led to its start visit (at a frontier, the way
-    # you were heading is usually the way on), instead of a random one.
-    momentum: float = 0.0
 
 
 def location(memory, settings):
@@ -108,7 +102,7 @@ _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
 
 
-def explore(emulator, rng, settings, known, start, start_state, start_path_length, last_action=None):
+def explore(emulator, rng, settings, known, start, start_state, start_path_length):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched, _records
     died = False
@@ -118,17 +112,13 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
     buttons = actions(settings.turbo)
-    weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in buttons])
-    probabilities = weights / weights.sum()
-    action = rng.choice(len(buttons), p=probabilities)
-    if last_action is not None and rng.random() < settings.momentum:
-        action = last_action
+    action = rng.integers(len(buttons))
     stale = 0
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
         if rng.random() > repeat_probability:
-            action = rng.choice(len(buttons), p=probabilities)
+            action = rng.integers(len(buttons))
         emulator.run(buttons[action], FRAMES_PER_STEP)
         pressed.append(action)
         state = emulator.save()
@@ -191,10 +181,10 @@ def worker(connection, settings, seed, index):
     rng = np.random.default_rng([seed, index])  # by worker index, not pid, so a run can be reproduced exactly
     known = {}
     while (task := connection.recv()) is not None:
-        start, start_state, start_path_length, last_action, updates = task
+        start, start_state, start_path_length, updates = task
         for place, visit in updates:
             known.setdefault(place, []).append(visit)
-        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length, last_action))
+        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length))
 
 
 class Explorers:
@@ -209,9 +199,9 @@ class Explorers:
         self._updates_sent = [0] * count
         self.count = count
 
-    def send(self, worker_index, start, start_state, start_path_length, updates, last_action=None):
+    def send(self, worker_index, start, start_state, start_path_length, updates):
         """updates is the main process's full, append-only log of (place, (holdings, path length)) updates."""
-        self._connections[worker_index].send((start, start_state, start_path_length, last_action,
+        self._connections[worker_index].send((start, start_state, start_path_length,
                                               updates[self._updates_sent[worker_index]:]))
         self._updates_sent[worker_index] = len(updates)
 

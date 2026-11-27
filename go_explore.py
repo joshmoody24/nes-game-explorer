@@ -307,8 +307,7 @@ def main():
     def assign(worker_index):
         index = archive.choose(rng)
         start_paths[worker_index] = archive.paths[index]
-        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates,
-                       archive.paths[index][-1] if archive.paths[index] else None)
+        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates)
 
     for worker_index in range(explorers.count):
         assign(worker_index)
