@@ -1336,3 +1336,11 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **--place-scheme screen:W,H,D[,N]** (c3ea262): shrunk gray picture (every 4th pixel, last frame of each step
   drawn; 0.04 ms) + N previous different cells. Hand scheme unchanged. Bench: hand vs screen:11,8,8 vs
   screen:6,4,4,2, 13 walls, 10M-frame cap, history off, seeds 1-5, on the thinkpad.
+- **Place bench round 1** (seed 1, 10M-frame cap, history off): hand 4/13 (lava 0.9M, ridley-door 1.1M,
+  ridley-exit 0.7M, missile-door 5.7M; the other 9 need history, --stay or >10M). screen:11,8,8 = every save new
+  (290-400K places in 10M frames) -> hit the 24G cap and crashed. screen:6,4,4,2 = nothing new (358 places in the
+  lava run) -> 0/13. Granularity dominates; sweeping between them.
+- **Hardware scroll is readable generically:** QuickNES state block PPUR bytes 8-9 = the PPU's 15-bit temp address
+  ("loopy t": coarse x/y, nametable, fine y), byte 10 = fine x. Decoded scroll matches Metroid's own $FD/$FC 73% (x)
+  / 87% (y) of 3077 saves (misses likely frame timing). Basis for a human-like place: stretch between screen
+  transitions + scroll travelled within it (dead reckoning), with the previous stretch as context.
