@@ -1217,3 +1217,12 @@ the state-level danger prediction to choose which states to keep and explore fro
   Rinkas take ~30 energy per 24-30 steps. 120 steps of scripted fire at the first Zebetite: 11 missiles hit, 60
   energy lost, Zebetite still standing. Race, 3 min x 10 workers, background fingerprint (--place-nametable) on vs
   off: neither got past. absx() is unreliable in this room (x=1 saves are at the right door).
+- **Zebetites passed and Mother Brain hit, uncheated (diagnostic --stay still in use).** Scripted probes: Samus is
+  stopped by the pillar the Zebetite sits on; missiles fired from the blue platform at Zebetite height chip it
+  (stripe pixels 31 -> 10), but Rinkas knock her off within ~40 steps. --place-nametable alone (3 min race): no
+  progress. --place-nametable + --stay "11,4;11,3;11,2;11,1" (hand-listed cells, diagnostic only, to generalize):
+  through to Mother Brain. Resources decide it: the best (11,2) arrivals had 56 missiles / 59 energy; from there
+  Mother Brain's glass broke (status 2) and hits reached 6 of 32 (mb-stay6/7), ending with 12 missiles / 29 energy.
+  Missiles and energy never peak in the same save; best joint stock found: 91 missiles / 149 energy at (11,8)
+  (Metroid shaft drops), 108 / 179 at (11,4). Near Mother Brain every save fails the idle-health check (turrets and
+  Rinkas drain), so the ratchet picker fell back to poor saves.
