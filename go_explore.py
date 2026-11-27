@@ -56,6 +56,8 @@ class Archive:
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     place_of: list = field(default_factory=list)  # each visit's place_numbers entry, kept as visits are added
+    children: list = field(default_factory=list)  # saves each visit's tries created
+    fertility: float = 0.0  # --fertility: weight visits by (1 + children) ** fertility; 0 is off
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
 
     def path_length(self, i):
@@ -77,6 +79,8 @@ class Archive:
                 self.active[i] = False
             self.states[slot], self.paths[slot], self.holdings[slot] = state, path, held
             self.parents[slot] = parent
+            if parent >= 0:
+                self.children[parent] += 1
             self.updates.append((place, visit))
             return "better"
         self.place_of.append(self.place_numbers.setdefault(choice_group(place), len(self.place_numbers)))
@@ -85,6 +89,9 @@ class Archive:
         self.states.append(state)
         self.times_chosen.append(self.familiar.get(place[:LOCATION_SIZE], 0) if place[0] != "record" else 0)
         self.parents.append(parent)
+        self.children.append(0)
+        if parent >= 0:
+            self.children[parent] += 1
         self.paths.append(path)
         self.holdings.append(held)
         self.active.append(True)
@@ -112,7 +119,9 @@ class Archive:
         active = np.array(self.active)
         place_of = np.array(self.place_of)
         visits_per_place = np.bincount(place_of, weights=active)
-        return active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
+        weights = active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
+        # Stepping stones to a breakthrough are saves whose tries keep creating saves (FINDINGS 2026-11-27).
+        return weights * (1 + np.array(self.children)) ** self.fertility if self.fertility else weights
 
 
 WEIGHTS_REUSE = 200  # choices between recomputing choice weights (see Archive.choose)
@@ -194,6 +203,7 @@ def parse_arguments():
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
     parser.add_argument("--skip-worn", action="store_true", help="don't keep new saves in rooms history wore out (more than the median room's history)")
     parser.add_argument("--stop-when", help="a bench.py wall name: stop as soon as a new save passes that wall's success test")
+    parser.add_argument("--fertility", type=float, default=0.0, help="weight visits by (1 + saves their tries created) ** this; 0 is off")
     parser.add_argument("--max-frames", type=int, default=0, help="stop after this many emulated frames (a budget that means the same on any machine); 0 = no limit")
     parser.add_argument("--segments", type=int, default=0, help="stop after this many tries (for exact before/after comparisons); 0 = no limit")
     parser.add_argument("--familiar", default="", help="runs whose choices count as already spent here: novelty is judged against all earlier experience, not just this run")
@@ -292,6 +302,7 @@ def main():
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     archive.familiar = familiar_counts(args.familiar, start, emulator)
+    archive.fertility = args.fertility
     if args.skip_worn and archive.familiar:
         archive.worn_rooms = worn_rooms(archive.familiar, hand_made_place(emulator.view(start), settings))
     progress = Progress()
