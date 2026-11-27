@@ -7,6 +7,8 @@ to add, which sprite tiles are always on screen) comes from a short random wande
            sticky  bytes holding bits that get set and never cleared along the wander (items, flags)
            cuts    bytes that change mostly when the camera jumps (a room change): a room number (per-game file
                    cache/cut_bytes.json from long wanders over many saves; a run's own start rarely crosses a door)
+           edges   bytes that change when the dead-reckoned position crosses a screen edge: map coordinates
+                   (per-game file cache/edge_bytes.json, like cuts)
            poke    bytes that change the future when altered, and change rarely (per-game file cache/poke_share.npy
                    from checks/poke_check.py: ~12M frames once per game)
   cast   which sprite tiles are on screen, minus the ones that almost always are (the player's): who's in the room
@@ -32,6 +34,7 @@ from emulator import button_mask
 
 CUT = 16
 FUZZY_BITS = 4
+EDGE_WINDOW = 2  # steps either side of a screen-edge crossing
 WANDER_WALKS, WANDER_STEPS = 20, 150
 
 
@@ -92,6 +95,29 @@ def cut_bytes(walks, most=8):
     return good[:most]
 
 
+def edge_bytes(walks, most=8):
+    """Bytes that change when the dead-reckoned position crosses a screen edge (256 across, 240 down): the game's own
+    map coordinates, found by watching where the counting happens."""
+    from explorers import moved
+    at_edge, elsewhere, edges, steps = 0, 0, 0, 0
+    for walk in walks:
+        position, crossings = walk[0][1], []
+        for (_, sa, _), (_, sb, _) in zip(walk, walk[1:]):
+            before, position = position, moved(position, sa, sb, 8)
+            crossings.append(position[0] // 256 != before[0] // 256 or position[1] // 240 != before[1] // 240)
+        for i, ((a, _, _), (b, _, _)) in enumerate(zip(walk, walk[1:])):
+            changed = (a != b).astype(np.int64)
+            # A game may update its own map coordinate a step or two after the scroll crosses the edge.
+            if any(crossings[max(0, i - EDGE_WINDOW):i + EDGE_WINDOW + 1]):
+                at_edge, edges = at_edge + changed, edges + 1
+            else:
+                elsewhere, steps = elsewhere + changed, steps + 1
+    if not edges:
+        return []
+    ratio = (at_edge / edges) / (elsewhere / max(steps, 1) + 1e-3)
+    return [int(b) for b in np.argsort(-ratio) if at_edge[b] / edges >= 0.1][:most]
+
+
 def poke_bytes(walks, share, most=16):
     """Rarely-changing bytes that alter the future in 5%+ of poked saves (95% of RAM never does), most effective first."""
     changes = sum((a != b).astype(np.int64) for walk in walks for (a, _, _), (b, _, _) in zip(walk, walk[1:]))
@@ -118,6 +144,7 @@ def pick(emulator, start_state, rng, settings, poke_share=None):
     found = {}
     if "bytes" in extras:
         chosen = {"sticky": lambda: sticky_bytes(walks), "cuts": lambda: json.loads(Path("cache/cut_bytes.json").read_text()),
+                  "edges": lambda: json.loads(Path("cache/edge_bytes.json").read_text()),
                   "poke": lambda: poke_bytes(walks, poke_share)}[settings.byte_picker]()
         found["extra_bytes"] = ",".join(map(str, chosen))
     if "cast" in extras:

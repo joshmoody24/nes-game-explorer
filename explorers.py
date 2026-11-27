@@ -72,6 +72,9 @@ class Settings:
     # Every grid size at once: >1 files each save under this many scroll places, the block (and player step) doubling
     # each level ("level", L, ...). A save is new if new at any level; go_explore shares attention evenly across levels.
     place_levels: int = 1
+    # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
+    # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
+    place_radius: int = 0
 
 
 def location(memory, settings):
@@ -174,7 +177,7 @@ def room_of(place):
     """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
     if place[0] == "record":
         return place[1]
-    return place if place[0] in ("screen", "scroll", "level") else tuple(place[:3])
+    return place if place[0] in ("screen", "scroll", "level", "radius") else tuple(place[:3])
 
 
 @dataclass
@@ -213,7 +216,16 @@ _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
 
 
-def explore(emulator, rng, settings, known, start, start_state, start_path_length, start_place):
+def nearest_center(feature, centers, radius):
+    """Index of the nearest center within radius (L-infinity), or None. centers: [n, d] array."""
+    if not len(centers):
+        return None
+    distance = np.abs(centers - feature).max(axis=1)
+    best = int(distance.argmin())
+    return best if distance[best] <= radius else None
+
+
+def explore(emulator, rng, settings, known, start, start_state, start_path_length, start_place, start_position=None):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched, _records
     died = False
@@ -229,7 +241,11 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     scrolling = settings.place_scheme.startswith("scroll:")
     if scrolling:
         previous_scroll = emulator.scroll(start_state)
-        position = travelled(start_place, previous_scroll, settings)
+        position = start_position if start_position is not None else travelled(start_place, previous_scroll, settings)
+        if settings.place_radius:
+            width = 2 + len([b for b in settings.player_bytes.split(",") if b])  # scroll x, y, then the player bytes
+            keys = list(dict.fromkeys(p[:1 + width] for p in known if p[0] == "radius"))
+            centers = np.array([k[1:] for k in keys], np.int64).reshape(len(keys), width)
         carry = _extras(emulator, settings).start(start_place)
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
@@ -262,6 +278,14 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
             extra = _extras(emulator, settings).part(state, memory, carry, probe_block, position)
             place = scroll_place(position, settings) + player_part(memory, settings) + extra
+            if settings.place_radius:
+                feature = np.array(tuple(position) + tuple(int(memory[int(b)]) for b in settings.player_bytes.split(",") if b), np.int64)
+                nearest = nearest_center(feature, centers, settings.place_radius)
+                if nearest is None:
+                    keys.append(("radius",) + tuple(int(v) for v in feature))
+                    centers = np.vstack([centers, feature])
+                    nearest = len(keys) - 1
+                place = keys[nearest] + extra
             levels = [("level", level) + tuple(p // (scroll_block(settings) << level) for p in position)
                       + tuple(v // (player_step(settings) << level) for v in (int(memory[int(b)]) for b in settings.player_bytes.split(",") if b))
                       + extra for level in range(settings.place_levels)] if settings.place_levels > 1 else [place]
@@ -277,7 +301,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             new = new or (offered not in known and offered not in found)
             rivals = known.get(offered, []) + ([(found[offered][2], found[offered][1])] if offered in found else [])
             if not any(beats(rival, (held, length)) for rival in rivals):
-                found[offered] = (state, length, held)
+                found[offered] = (state, length, held, tuple(position) if scrolling else None)
         if new:
             gaps.append(stale + 1)
             stale = 0
@@ -299,7 +323,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     value_place = ("record", room, b, value)
                     rivals = known.get(value_place, []) + ([(found[value_place][2], found[value_place][1])] if value_place in found else [])
                     if not any(beats(rival, (held, length)) for rival in rivals):
-                        found[value_place] = (state, length, held)
+                        found[value_place] = (state, length, held, tuple(position) if scrolling else None)
                 _records[(room, b)] = (min(low, value), max(high, value), went_down, went_up, count)
             rare_values = []
         if step % PROGRESS_SAMPLE_EVERY == 0:
@@ -325,10 +349,10 @@ def worker(connection, settings, seed, index):
     rng = np.random.default_rng([seed, index])  # by worker index, not pid, so a run can be reproduced exactly
     known = {}
     while (task := connection.recv()) is not None:
-        start, start_state, start_path_length, start_place, updates = task
+        start, start_state, start_path_length, start_place, start_position, updates = task
         for place, visit in updates:
             known.setdefault(place, []).append(visit)
-        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length, start_place))
+        connection.send(explore(emulator, rng, settings, known, start, start_state, start_path_length, start_place, start_position))
 
 
 class Explorers:
@@ -343,9 +367,9 @@ class Explorers:
         self._updates_sent = [0] * count
         self.count = count
 
-    def send(self, worker_index, start, start_state, start_path_length, start_place, updates):
+    def send(self, worker_index, start, start_state, start_path_length, start_place, start_position, updates):
         """updates is the main process's full, append-only log of (place, (holdings, path length)) updates."""
-        self._connections[worker_index].send((start, start_state, start_path_length, start_place,
+        self._connections[worker_index].send((start, start_state, start_path_length, start_place, start_position,
                                               updates[self._updates_sent[worker_index]:]))
         self._updates_sent[worker_index] = len(updates)
 

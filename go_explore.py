@@ -59,6 +59,7 @@ class Archive:
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     place_of: list = field(default_factory=list)  # each visit's place_numbers entry, kept as visits are added
     place_level: list = field(default_factory=list)  # each place number's grid level (Settings.place_levels), else 0
+    positions: list = field(default_factory=list)  # each visit's exact dead-reckoned position (scroll places), or None
     children: list = field(default_factory=list)  # saves each visit's tries created
     fertility: float = 0.0  # --fertility: weight visits by (1 + children) ** fertility; 0 is off
     descendants: list = field(default_factory=list)  # all saves descended from each visit
@@ -71,7 +72,7 @@ class Archive:
     def path_length(self, i):
         return UNKNOWN_PATH_LENGTH if self.paths[i] is None else len(self.paths[i])
 
-    def offer(self, place, state, held, parent=-1, path=None, scenery=None):
+    def offer(self, place, state, held, parent=-1, path=None, scenery=None, position=None):
         """Keeps the visit unless one already kept there beats it. Returns "new" (new place), "better" or None."""
         if self.worn_rooms and place[0] != "record" and tuple(place[:3]) in self.worn_rooms and place not in self.index:
             return None
@@ -86,6 +87,7 @@ class Archive:
             for i in others:
                 self.active[i] = False
             self.states[slot], self.paths[slot], self.holdings[slot] = state, path, held
+            self.positions[slot] = position
             self.parents[slot] = parent
             if parent >= 0:
                 self.children[parent] += 1
@@ -98,6 +100,7 @@ class Archive:
         self.index.setdefault(place, []).append(len(self.places))
         self.places.append(place)
         self.states.append(state)
+        self.positions.append(position)
         self.times_chosen.append(self.familiar.get(place[:LOCATION_SIZE], 0) if place[0] != "record" else 0)
         self.parents.append(parent)
         self.children.append(0)
@@ -193,7 +196,7 @@ def resumed_archive(run_name, settings, emulator, first=0):
     for state, place, path in list(zip(saved["states"], places, paths))[first:]:
         memory = emulator.view(state)
         # Record, screen and scroll places are kept as stored: their history (cells, distance travelled) isn't in the state.
-        archive.offer(place if place is not None and place[0] in ("record", "screen", "scroll", "level") else place_of_state(emulator, state, settings),
+        archive.offer(place if place is not None and place[0] in ("record", "screen", "scroll", "level", "radius") else place_of_state(emulator, state, settings),
                       state, holdings(memory, settings), path=path)
     return archive
 
@@ -372,7 +375,8 @@ def main():
     def assign(worker_index):
         index = archive.choose(rng)
         start_paths[worker_index] = archive.paths[index]
-        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.places[index], archive.updates)
+        explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.places[index],
+                       archive.positions[index], archive.updates)
 
     for worker_index in range(explorers.count):
         assign(worker_index)
@@ -402,9 +406,9 @@ def main():
                 gaps.extend(segment.gaps)
                 start_path = start_paths[worker_index]
                 outcomes = []
-                for place, (state, length, held) in segment.found.items():
+                for place, (state, length, held, position) in segment.found.items():
                     outcomes.append(archive.offer(place, state, held, segment.start, scenery=tile_bag(emulator.nametable(state)) if archive.scenery_recency else None, path=
-                                                  None if start_path is None else start_path + segment.actions[:length - len(start_path)]))
+                                                  None if start_path is None else start_path + segment.actions[:length - len(start_path)], position=position))
                     if outcomes[-1]:
                         if stop_test and stop_test(emulator.view(state)):
                             print(f"stopping: --stop-when {args.stop_when} passed after {time.perf_counter() - started:.0f}s", flush=True)
