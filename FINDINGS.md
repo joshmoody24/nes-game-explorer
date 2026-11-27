@@ -1287,3 +1287,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   --fertility 1 clearly worse; --descendants 0.5 and --scenery-recency 1 about even on exit and lava, worse on the
   door (~1.8M vs ~0.8M); --stale-steps 40 about even, worse on lava. None kept. **Noise lesson:** per wall, seeds
   spread ~+-0.5M frames, so 3 seeds only detect ~2x effects; smaller real gains need many more seeds or walls.
+- **autochain, no-picking (MULTISTART) vs newest-room pick** (laptop, post-Ridley save, 6 workers each, 24 x 3-min
+  chunks, ~3M frames per chunk = ~72M per arm, about ONE unit chunk; laptop is ~7x slower per worker): neither left
+  Ridley's lair. Newest-room pick: 9 layers, rooms reset each layer (8-26). Multi-start (new layer = every save the
+  stalled chunk found): 12 layers, rooms grow steadily to 48 - it never throws away the frontier. Structural win at
+  equal compute, and it removes the hand pick. Continuing the multi-start chain with 12 workers (ac-multi2).
+  Note: the stall test counts record places, hundreds per chunk, so it fires about every other chunk.
