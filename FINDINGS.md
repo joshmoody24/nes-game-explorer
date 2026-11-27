@@ -1364,3 +1364,11 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Contingency player bytes in places** (`scroll:B,P`, 15f5f5e): the run-start probe picks Samus x/y (781/782) or
   their copies from 3 of 4 starts (lava edge picks two other bytes for the across axis). P=8 is too fine (1-3.6K
   places per 300 tries vs hand 177); benching P=16/32.
+- **2M-frame cap, 5 seeds, 4 walls** (Josh: tight budgets force smarter search): hand 9/20 (lava 1, ridley-door 3,
+  ridley-exit 5, missile 0); scroll:8,32 6/20 (ridley-door 5/5 at median 0.8M, beating hand); scroll:16 2/20;
+  scroll:16,32 1/20; scroll:8 0/20.
+- **The bench is a coin flip per wall at this size:** scroll:16,32 on ridley-door went 0/5 in that bench and 4/4
+  in a rerun with byte-identical config.json (same player bytes 782,81,781/82). Failing runs wander into other
+  rooms (4 rooms, 60 layouts) and spend the budget; passing ones open the door by ~0.5M. 15-worker runs aren't
+  reproducible (worker timing), so seeds are independent draws. Per-wall verdicts need ~10+ seeds; only large
+  totals mean anything at 5.
