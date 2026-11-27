@@ -1308,3 +1308,8 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **No-picking chain, end of night** (ac-multi3 finished 30 chunks): Norfair, 90 rooms, not yet Brinstar. Rooms keep
   climbing slowly (63 -> 90 over 18 chunks, ~108M frames). Whole stretch from the post-Ridley save: ~340M laptop
   frames, zero hand picks. Next: resume it (CONTINUE_RUN=ac-multi3/c29) on the unit, where it runs ~7x faster.
+- **No-picking chain plateaus in Norfair** (ac-multi4, resumed from ac-multi3/c29, 38 chunks x ~6M = ~230M frames):
+  rooms flat at 90-93 the whole run; a stall fires every other chunk and each new layer (3-3.4K saves) re-finds the
+  same rooms. Note "rooms" counts only the current layer's archive, so it can't grow once a layer covers the area.
+  Open question for next time: is it genuinely stuck (which Norfair wall?), or is the stall-and-restart loop itself
+  wasting the compute? Cheap check: map which cells the layers reach vs the known route to Brinstar, offline.
