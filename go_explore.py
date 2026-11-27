@@ -8,7 +8,6 @@ Usage: python go_explore.py <run name> [--minutes M] [--workers N] [settings fla
 """
 
 import argparse
-import functools
 import dataclasses
 import json
 import os
@@ -23,7 +22,6 @@ import numpy as np
 
 from emulator import Emulator
 from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings
-import danger
 from metroid import permanent_progress, start_game
 from progress import Progress
 
@@ -52,23 +50,12 @@ class Archive:
     paths: list = field(default_factory=list)
     holdings: list = field(default_factory=list)  # see explorers.holdings
     active: list = field(default_factory=list)  # False once another visit to the same place beats it
-    surprises: list = field(default_factory=list)  # new change patterns found by segments started from each visit
     deaths: list = field(default_factory=list)  # segments started from each visit that ended in game over
-    surprise_weight: float = 0.0  # see explorers.Settings.surprise
-    holdings_weight: float = 0.0  # see explorers.Settings.favor_holdings
-    dangers: list = field(default_factory=list)  # see explorers.Settings.danger_model
-    danger_weight: float = 0.0
     productive: list = field(default_factory=list)  # segments from each visit that found a new place
-    mastery_weight: float = 0.0
     cached_weights: tuple = None  # (archive size, choice probabilities, uses) reused by choose
-    recency_weight: float = 0.0  # see explorers.Settings.recency
-    selection: str = "classic"  # see explorers.Settings.selection
-    rng: object = None  # draws Thompson samples (set by main)
-    progress: list = field(default_factory=list)  # how far along the guide route each visit is (0-1)
     # The locations each visit's lineage passed through, snapshotted when the visit was kept (parent links
     # can loop after slot reuse; these can't). Kept only when exploring with a refill (to pay back cheats).
     routes: list = field(default_factory=list)
-    guide_weight: float = 0.0
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     updates: list = field(default_factory=list)  # append-only (place, (holdings, path length)) log workers sync from
@@ -105,7 +92,6 @@ class Archive:
         self.holdings.append(held)
         self.active.append(True)
         self.last_slot = len(self.places) - 1
-        self.surprises.append(0)
         self.deaths.append(0)
         self.productive.append(0)
         self.updates.append((place, visit))
@@ -126,66 +112,15 @@ class Archive:
         self.times_chosen[index] += 1
         return index
 
-    def sampled_rates(self, chosen):
-        """One Thompson sample per visit of its chance that a try finds something new: Beta(1 + successes, prior
-        failures + failures), where the prior has the strength of one success and the mean of the archive's rate
-        ("thompson") or of the visit's room's rate, itself starting from the archive's ("thompson-room")."""
-        found = np.array(self.productive, float)
-        failed = np.maximum(chosen - found, 0)
-        rate = (found.sum() + 1) / (chosen.sum() + 2)
-        prior_failures = np.full(len(found), 1 / rate - 1)
-        if self.selection == "thompson-room":
-            rooms = {}
-            room_of = np.array([rooms.setdefault(tuple(p[1][:3]) if p[0] == "record" else tuple(p[:3]), len(rooms))
-                                for p in self.places])
-            room_found, room_tries = np.bincount(room_of, found), np.bincount(room_of, chosen)
-            room_rate = (room_found + 1) / (room_tries + 1 / rate)
-            prior_failures = 1 / room_rate[room_of] - 1
-        return self.rng.beta(1 + found, prior_failures + failed)
-
     def weights(self):
         active = np.array(self.active)
-        place_of = np.array([self.place_numbers[choice_group(p)] for p in self.places]) if len(self.place_numbers) else None
+        place_of = np.array([self.place_numbers[choice_group(p)] for p in self.places])
         visits_per_place = np.bincount(place_of, weights=active)
-        chosen = np.array(self.times_chosen)
-        weights = (self.sampled_rates(chosen) if self.selection.startswith("thompson") else 1 / np.sqrt(1 + chosen)) * active
-        weights = weights / np.maximum(visits_per_place[place_of], 1)
-        if self.selection == "rooms":
-            # Each room gets one share however many saves it holds, so a big explored area can't drown out the
-            # few rooms where progress is happening; the share fades with the tries the room has had.
-            rooms = {}
-            room_of = np.array([rooms.setdefault(p[1] if p[0] in ("record", "climb") else tuple(p[:3]), len(rooms)) for p in self.places])
-            room_total = np.bincount(room_of, weights=weights)
-            room_tries = np.bincount(room_of, weights=chosen)
-            weights = weights / np.maximum(room_total[room_of], 1e-12) / np.sqrt(1 + room_tries[room_of])
-        # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
-        weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
-        if self.guide_weight and self.progress:
-            progress = np.array(self.progress + [0.0] * (len(weights) - len(self.progress)))
-            weights = weights * (1 + self.guide_weight * progress)
-        if self.mastery_weight:
-            p = (np.array(self.productive) + 0.5) / (chosen + 1)
-            weights = weights * (1 + self.mastery_weight * 4 * np.clip(p, 0, 1) * (1 - np.clip(p, 0, 1)))
-        if self.danger_weight and self.dangers:
-            danger = np.array(self.dangers)
-            weights = weights / (1 + self.danger_weight * danger / max(float(np.median(danger)), 1e-6))
-        if self.recency_weight:
-            weights = weights * (1 + self.recency_weight * (np.arange(len(weights)) / max(len(weights) - 1, 1)) ** 4)
-        if self.holdings_weight and self.holdings and len(self.holdings[0]):
-            held = np.array(self.holdings, dtype=float).sum(1)
-            weights = weights * (1 + self.holdings_weight * held / max(held.max(), 1e-9))
-        return weights
+        return active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
 
 
 WEIGHTS_REUSE = 200  # choices between recomputing choice weights (see Archive.choose)
 GAIN_KEYS = ("items", "energy tanks", "max missiles", "bosses")  # progress fields --stop-at-gain watches
-
-
-@functools.lru_cache(maxsize=1)
-def guide_route(path):
-    """{location: progress 0-1} along a guide route (see explorers.Settings.guide)."""
-    locations = pickle.loads(Path(path).read_bytes())
-    return {tuple(loc): (k + 1) / len(locations) for k, loc in enumerate(locations)}
 
 
 def choice_group(place):
@@ -361,11 +296,7 @@ def main():
     if args.resume:
         archive = resumed_archive(args.resume, settings, emulator)
     else:
-        archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings,
-                          danger_weight=settings.avoid_danger if settings.danger_model else 0.0,
-                          mastery_weight=settings.mastery,
-                          guide_weight=settings.guide_weight if settings.guide else 0.0, recency_weight=settings.recency,
-                          selection=settings.selection, rng=np.random.default_rng(args.seed))
+        archive = Archive()
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     archive.familiar = familiar_counts(args.familiar, start, emulator)
@@ -377,7 +308,6 @@ def main():
     gaps = []
     segment_log = {"start": [], "new_places": [], "frames": []}
     recordings = Recordings()
-    seen_patterns = set()  # every change pattern any segment has produced (see explorers.Settings.surprise)
     explorers = Explorers(args.workers, settings, args.seed)
 
     # The path to each worker's start state, as it was when assigned: the archive may replace that state
@@ -413,12 +343,11 @@ def main():
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
                 start_path = start_paths[worker_index]
-                outcomes, created = [], []
+                outcomes = []
                 for place, (state, length, held) in segment.found.items():
                     outcomes.append(archive.offer(place, state, held, segment.start,
                                                   None if start_path is None else start_path + segment.actions[:length - len(start_path)]))
                     if outcomes[-1]:
-                        created.append(archive.last_slot)
                         if stop_test and stop_test(emulator.view(state)):
                             print(f"stopping: --stop-when {args.stop_when} passed after {time.perf_counter() - started:.0f}s", flush=True)
                             deadline = time.perf_counter()
@@ -430,25 +359,8 @@ def main():
                             archive.routes[archive.last_slot] = (parent_route if parent_route[-1:] == (here,)
                                                                  else parent_route + (here,))
                 new_places = outcomes.count("new")
-                if settings.danger_model:
-                    while len(archive.dangers) < len(archive.states):
-                        archive.dangers.append(0.0)
-                    for place, (state, _, _) in segment.found.items():
-                        for i in archive.index.get(place, []):
-                            if archive.states[i] is state:
-                                archive.dangers[i] = danger.score(settings.danger_model, emulator.memory(state))
-                archive.surprises[segment.start] += len(segment.patterns - seen_patterns)
                 archive.deaths[segment.start] += segment.died
                 archive.productive[segment.start] += new_places > 0
-                if settings.guide:
-                    route = guide_route(settings.guide)
-                    while len(archive.progress) < len(archive.states):
-                        archive.progress.append(0.0)
-                    for slot in created:
-                        here = place_location(archive.places[slot])
-                        if here in route:
-                            archive.progress[slot] = max(archive.progress[slot], route[here])
-                seen_patterns |= segment.patterns
                 if rng.random() < args.record:
                     recordings.add(segment)
                 segment_log["start"].append(segment.start)

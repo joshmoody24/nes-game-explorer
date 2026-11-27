@@ -40,26 +40,9 @@ class Settings:
     # Hand-given knowledge, for diagnosis: relative chance of button combos with SELECT (Metroid's missile switch)
     # in random play. Below 1, random play wastes missiles less often.
     select_weight: float = 1.0
-    # Surprise: weight of the selection bonus for visits whose segments produced something never seen before:
-    # a rarely-changing memory byte taking a value it never had (a door taking its first missile hit). 0: off.
-    surprise: float = 0.0
-    # Choose like a hoarder: favor exploring from visits holding more of the hoarded bytes (see keep_more), so
-    # lineages that carry resources advance as fast as those that spent them. Weight of the bonus; 0: off.
-    favor_holdings: float = 0.0
     # Diagnostic ceiling ("what if resources were free?"): comma-separated "index:value" memory edits applied to
     # every segment's start state, e.g. refilling ammo and health. Empty: off.
     refill: str = ""
-    # A saved danger model (see danger.py) and how strongly to avoid exploring from visits it scores as
-    # dangerous: weight / (1 + avoid_danger x danger / typical danger). Empty path: off.
-    danger_model: str = ""
-    avoid_danger: float = 0.0
-    # Mastery: favor visits whose explorations find something new only sometimes (the edge of current
-    # skill): weight x (1 + mastery x 4p(1-p)), p = share of segments from the visit that found a new place.
-    mastery: float = 0.0
-    # Pay back a cheat: a file with the ordered locations of a route found with edited-in resources, and how
-    # strongly to favor visits further along it: weight x (1 + guide_weight x progress). Empty path: off.
-    guide: str = ""
-    guide_weight: float = 0.0
     # Hoarding: comma-separated memory indices (memory() numbering, optionally "index:scale") of things random
     # play spends. Each place keeps every visit that no other visit beats on all of them (see beats), so
     # nothing is traded for anything else; a state holding more can become one holding less, not back. Empty
@@ -82,13 +65,6 @@ class Settings:
     # that has set records both ways in a room is not a progress counter; one counts only from its PROGRESS_RECORDS-th
     # one-way record on.
     novel_values: bool = False
-    # Favor newer visits when choosing where to explore: weight x (1 + recency x (age rank)^4), age rank 0 for the
-    # oldest visit and 1 for the newest, so effort follows the frontier instead of spreading over everything found.
-    recency: float = 0.0
-    # How choose() weighs visits: "classic" 1/sqrt(1 + times chosen); "thompson" samples each visit's chance that a
-    # try finds something new from its own record, starting from the archive's overall rate; "thompson-room" starts
-    # it from its room's rate instead (which itself starts from the archive's), so mined-out rooms fade.
-    selection: str = "classic"
     # Keep a save whenever the player reaches a new furthest point in a room in any direction (8-pixel steps), as
     # its own place: exits sit at a room's extremes, and coarse position blocks miss getting closer to them.
     climb_records: bool = False
@@ -152,7 +128,6 @@ class Segment:
     gaps: list  # for each new place, steps since the previous new place (or since the segment began)
     actions: bytes  # index into ACTIONS for every step taken, so the segment can be replayed exactly
     start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
-    patterns: frozenset = frozenset()  # (rarely-changing byte, new value) pairs seen, as byte * 256 + value
     died: bool = False  # ended in game over
 
 
@@ -196,7 +171,7 @@ def guarded_value(memory, indices):
 def explore(emulator, rng, settings, known, start, start_state, start_path_length, last_action=None):
     """known: {place: [(holdings, path length) of every visit the archive kept there]}."""
     global _change_counts, _steps_watched, _records
-    patterns, died = set(), False
+    died = False
     if settings.refill:
         start_state = refilled(emulator, start_state, settings.refill)
     emulator.load(start_state)
@@ -224,14 +199,13 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         full_memory = emulator.memory(state)
         if previous_memory is not None:
             progress.see_change(previous_memory, full_memory)
-            if settings.surprise or settings.novel_values:
+            if settings.novel_values:
                 changed_before = changed if changed is not None else np.zeros(len(full_memory), bool)
                 changed = full_memory != previous_memory
                 _change_counts = changed.astype(np.int64) if _change_counts is None else _change_counts + changed
                 _steps_watched += 1
                 if _steps_watched > WARMUP_STEPS:
                     rare = np.flatnonzero(changed & (_change_counts < RARE_CHANGE_RATE * _steps_watched))
-                    patterns.update(int(b) * 256 + int(full_memory[b]) for b in rare)
                     # Only isolated changes: a hit lowers hit points in one jump; moving things change step after step.
                     rare_values = [(int(b), int(full_memory[b])) for b in rare if not changed_before[b]]
         previous_memory = full_memory
@@ -285,7 +259,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP, gaps, bytes(pressed), zlib.crc32(start_state),
-                   frozenset(patterns), died)
+                   died)
 
 
 def worker(connection, settings, seed, index):
