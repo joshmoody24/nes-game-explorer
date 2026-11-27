@@ -56,14 +56,6 @@ class Settings:
     # Mastery: favor visits whose explorations find something new only sometimes (the edge of current
     # skill): weight x (1 + mastery x 4p(1-p)), p = share of segments from the visit that found a new place.
     mastery: float = 0.0
-    # Learned chooser: weight of a logistic model, refit online, that predicts from a visit's drive signals
-    # (see go_explore.Archive.signals) whether exploring from it finds a new place. 0: off (signals and
-    # outcomes are still logged to decisions.npz).
-    learned_chooser: float = 0.0
-    # What the learned chooser predicts: "now" (the segment found a new place) or "later" (the visits it
-    # created grew into a top-2% lineage, judged on decisions old enough to have grown).
-    chooser_target: str = "now"
-    chooser_file: str = ""  # a fixed learned chooser (from checks.downstream_check --save), used from the start
     # Pay back a cheat: a file with the ordered locations of a route found with edited-in resources, and how
     # strongly to favor visits further along it: weight x (1 + guide_weight x progress). Empty path: off.
     guide: str = ""

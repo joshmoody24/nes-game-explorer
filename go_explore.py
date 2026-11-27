@@ -60,8 +60,6 @@ class Archive:
     danger_weight: float = 0.0
     productive: list = field(default_factory=list)  # segments from each visit that found a new place
     mastery_weight: float = 0.0
-    chooser_weight: float = 0.0  # see explorers.Settings.learned_chooser
-    chooser: tuple = None  # (weights, bias, means, scales) of the learned chooser, once fit
     cached_weights: tuple = None  # (archive size, choice probabilities, uses) reused by choose
     recency_weight: float = 0.0  # see explorers.Settings.recency
     selection: str = "classic"  # see explorers.Settings.selection
@@ -113,19 +111,6 @@ class Archive:
         self.updates.append((place, visit))
         return "better" if visits else "new"
 
-    SIGNALS = ["rarely chosen", "holdings", "danger", "surprise rate", "death rate", "success rate", "path length"]
-
-    def signals(self, visits=None):
-        """[visits, drives]: the drive signals of the given visits (default all) as they stand now (the learned
-        chooser's senses)."""
-        visits = range(len(self.places)) if visits is None else visits
-        pick = lambda values, default=0.0: np.array([values[i] if i < len(values) else default for i in visits], float)
-        tries = 1 + pick(self.times_chosen)
-        held = np.array([sum(self.holdings[i]) for i in visits], float)
-        lengths = np.array([self.path_length(i) for i in visits], float)
-        return np.stack([1 / np.sqrt(tries), held, pick(self.dangers), pick(self.surprises) / tries,
-                         pick(self.deaths) / tries, pick(self.productive) / tries, np.minimum(lengths, 1e5)], 1)
-
     def choose(self, rng):
         """
         A rarely chosen visit still worth keeping. Chooses among places, not visits (each place's weight split
@@ -175,11 +160,6 @@ class Archive:
             weights = weights / np.maximum(room_total[room_of], 1e-12) / np.sqrt(1 + room_tries[room_of])
         # Visits whose segments keep surprising get chosen more; the bonus fades unless surprises continue.
         weights = weights * (1 + self.surprise_weight * np.log1p(np.array(self.surprises)) / (1 + chosen))
-        if self.chooser_weight and self.chooser is not None:
-            w, b, means, scales = self.chooser
-            logit = ((self.signals() - means) / scales) @ w + b
-            logit = (logit - logit.mean()) / (logit.std() + 1e-9)
-            weights = weights * np.exp(np.clip(self.chooser_weight * logit, -20, 20))
         if self.guide_weight and self.progress:
             progress = np.array(self.progress + [0.0] * (len(weights) - len(self.progress)))
             weights = weights * (1 + self.guide_weight * progress)
@@ -197,10 +177,8 @@ class Archive:
         return weights
 
 
-CHOOSER_REFIT_EVERY, CHOOSER_WINDOW = 2000, 50000
 WEIGHTS_REUSE = 200  # choices between recomputing choice weights (see Archive.choose)
 GAIN_KEYS = ("items", "energy tanks", "max missiles", "bosses")  # progress fields --stop-at-gain watches
-CHOOSER_LAG = 5000  # decisions a "later" label waits for its lineage to grow
 
 
 @functools.lru_cache(maxsize=1)
@@ -219,24 +197,6 @@ def choice_group(place):
 def place_location(place):
     """The location part of a hand-made place (area, room, position), as in graph.location."""
     return tuple(place[:5])
-
-
-def lineage_sizes(parents):
-    """Number of descendants of every visit (cycles from slot reuse are cut)."""
-    from checks.value_check import descendants
-    return descendants(parents)
-
-
-def fit_chooser(x, y, steps=300, rate=0.2):
-    """Logistic regression (standardized inputs) from drive signals to "found a new place"."""
-    means, scales = x.mean(0), x.std(0) + 1e-9
-    z = (x - means) / scales
-    w, b = np.zeros(z.shape[1]), float(np.log((y.mean() + 1e-4) / (1 - y.mean() + 1e-4)))
-    for _ in range(steps):
-        p = 1 / (1 + np.exp(-(z @ w + b)))
-        w -= rate * (z.T @ (p - y) / len(y) + 1e-3 * w)
-        b -= rate * float((p - y).mean())
-    return w, b, means, scales
 
 
 def stalled(history, now, window_seconds):
@@ -403,10 +363,9 @@ def main():
     else:
         archive = Archive(surprise_weight=settings.surprise, holdings_weight=settings.favor_holdings,
                           danger_weight=settings.avoid_danger if settings.danger_model else 0.0,
-                          mastery_weight=settings.mastery, chooser_weight=settings.learned_chooser,
+                          mastery_weight=settings.mastery,
                           guide_weight=settings.guide_weight if settings.guide else 0.0, recency_weight=settings.recency,
-                          selection=settings.selection, rng=np.random.default_rng(args.seed),
-                          chooser=pickle.loads(Path(settings.chooser_file).read_bytes()) if settings.chooser_file else None)
+                          selection=settings.selection, rng=np.random.default_rng(args.seed))
         memory = emulator.view(start)
         archive.offer(hand_made_place(memory, settings), start, holdings(memory, settings), path=b"")
     archive.familiar = familiar_counts(args.familiar, start, emulator)
@@ -425,13 +384,8 @@ def main():
     # (with a shorter path) while the worker explores from it.
     start_paths = [None] * explorers.count
 
-    decisions = {"signals": [], "found": [], "visit": [], "created": []}
-    pending_signals = [None] * explorers.count
-
     def assign(worker_index):
         index = archive.choose(rng)
-        # A copy: a row view would keep the whole signals table alive for every logged decision.
-        pending_signals[worker_index] = archive.signals([index])[0]
         start_paths[worker_index] = archive.paths[index]
         explorers.send(worker_index, index, archive.states[index], archive.path_length(index), archive.updates,
                        archive.paths[index][-1] if archive.paths[index] else None)
@@ -486,8 +440,6 @@ def main():
                 archive.surprises[segment.start] += len(segment.patterns - seen_patterns)
                 archive.deaths[segment.start] += segment.died
                 archive.productive[segment.start] += new_places > 0
-                decisions["signals"].append(pending_signals[worker_index])
-                decisions["found"].append(new_places > 0)
                 if settings.guide:
                     route = guide_route(settings.guide)
                     while len(archive.progress) < len(archive.states):
@@ -496,22 +448,6 @@ def main():
                         here = place_location(archive.places[slot])
                         if here in route:
                             archive.progress[slot] = max(archive.progress[slot], route[here])
-                decisions["visit"].append(segment.start)
-                decisions["created"].append(created)
-                if len(decisions["found"]) % CHOOSER_REFIT_EVERY == 0 and not settings.chooser_file:
-                    if settings.chooser_target == "later":
-                        old = len(decisions["found"]) - CHOOSER_LAG
-                        if old > CHOOSER_REFIT_EVERY:
-                            window = range(max(0, old - CHOOSER_WINDOW), old)
-                            size = lineage_sizes(archive.parents)
-                            growth = np.array([sum(1 + size[c] for c in decisions["created"][k]) for k in window], float)
-                            positive = growth[growth > 0]
-                            if len(positive):
-                                labels = (growth >= np.quantile(positive, 0.98)).astype(float)
-                                archive.chooser = fit_chooser(np.array([decisions["signals"][k] for k in window]), labels)
-                    else:
-                        archive.chooser = fit_chooser(np.array(decisions["signals"][-CHOOSER_WINDOW:]),
-                                                      np.array(decisions["found"][-CHOOSER_WINDOW:], float))
                 seen_patterns |= segment.patterns
                 if rng.random() < args.record:
                     recordings.add(segment)
@@ -544,10 +480,6 @@ def main():
                 last_checkpoint = now
     explorers.close()
     checkpoint(run_dir, archive, segment_log, recordings)
-    np.savez(run_dir / "decisions.npz", signals=np.array(decisions["signals"]), found=np.array(decisions["found"]),
-             names=np.array(Archive.SIGNALS), visit=np.array(decisions["visit"]),
-             created_offsets=np.cumsum([0] + [len(c) for c in decisions["created"]]),
-             created=np.array([i for c in decisions["created"] for i in c], int))
     if progress.ever_up is not None:
         # Every bit ever seen turning on, and every bit ever seen turning off, over every step of the run.
         np.savez(run_dir / "bit_flips.npz", ever_up=progress.ever_up, ever_down=progress.ever_down)
