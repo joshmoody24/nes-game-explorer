@@ -1320,3 +1320,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   its 1,409 Norfair saves -> (18,30) reached in 3 min / 5.8M frames (the chain: never, in ~230M). So the "wall" was
   wasted attention. General fix (31b78e0): a new layer keeps only saves in rooms the stalled layer discovered
   itself. Testing from the post-Ridley save (ac-front).
+- **Correction: the laptop isn't throttled at rest; it has a load cliff.** 1/2/4 emulator processes: ~4.5 GHz,
+  30K/59K/117K frames/s. 8 processes: all cores ~1 GHz, 47K total. Overnight's 12-worker runs got ~33K, so every
+  laptop chain last night ran at about a quarter of what 4 workers would have given. Suspect a 65 W charger limit.
+- **Thinkpad (joshm-thinkpad-1) online:** reproduces refA exactly; 16 workers ~172K frames/s.
