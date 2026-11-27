@@ -45,7 +45,7 @@ class Archive:
     familiar: dict = field(default_factory=dict)  # location -> choices earlier runs spent there (--familiar)
     worn_rooms: frozenset = frozenset()  # rooms history wore out (--skip-worn): new saves there aren't kept
     parents: list = field(default_factory=list)  # archive index of the visit whose segment found this one (-1: start)
-    # Buttons (indices into ACTIONS) from the start state to the kept state: every visit has a replayable
+    # Buttons (indices into controls.actions(Settings.turbo)) from the start state to the kept state: every visit has a replayable
     # route. None for places resumed from an older run, which didn't keep paths.
     paths: list = field(default_factory=list)
     holdings: list = field(default_factory=list)  # see explorers.holdings
@@ -156,7 +156,7 @@ class Recordings:
     """
     Button sequences of sampled segments, saved as trajectories.npz: for recording i, the segment started
     from archive index start[i] (whose state had checksum start_checksum[i]) and pressed
-    actions[offsets[i]:offsets[i + 1]] (indices into controls.ACTIONS). Emulation is deterministic, so
+    actions[offsets[i]:offsets[i + 1]] (indices into controls.actions(Settings.turbo)). Emulation is deterministic, so
     replaying those buttons from that state regenerates every frame.
     """
 
@@ -208,7 +208,7 @@ def parse_arguments():
     for setting in dataclasses.fields(Settings):
         flag = "--" + setting.name.replace("_", "-")
         if isinstance(setting.default, bool):
-            parser.add_argument(flag, action="store_true")
+            parser.add_argument(flag, action=argparse.BooleanOptionalAction, default=setting.default)
         else:
             kind = int if setting.default is None else type(setting.default)  # the only optional setting is an int
             parser.add_argument(flag, type=kind, default=setting.default)

@@ -15,7 +15,7 @@ from multiprocessing.connection import wait
 
 import numpy as np
 
-from controls import ACTIONS, FRAMES_PER_STEP
+from controls import FRAMES_PER_STEP, TURBO_FROM_ENVIRONMENT, actions
 from emulator import Emulator, button_mask
 from metroid import ENERGY_TANKS, GAME_MODE, GAME_OVER, ITEMS, MAP_X, MAP_Y, MAX_MISSILES, ROOM_X, ROOM_Y, area_of, at
 from progress import Progress
@@ -27,6 +27,7 @@ PROGRESS_SAMPLE_EVERY = 25
 @dataclass(frozen=True)
 class Settings:
     steps_per_segment: int = 100
+    turbo: bool = TURBO_FROM_ENVIRONMENT  # also offer A/B pressed every step instead of held (see controls.actions)
     # End a segment after this many steps in a row without a new place. None never ends early.
     stale_steps: int | None = None
     # Go-Explore's random exploration repeats the previous action most of the time, so it makes
@@ -80,7 +81,7 @@ class Segment:
     progress: Progress
     frames: int
     gaps: list  # for each new place, steps since the previous new place (or since the segment began)
-    actions: bytes  # index into ACTIONS for every step taken, so the segment can be replayed exactly
+    actions: bytes  # index into controls.actions(Settings.turbo) for every step taken, so the segment can be replayed exactly
     start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
     died: bool = False  # ended in game over
 
@@ -116,9 +117,10 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     rare_values, changed = [], None
     found, progress, gaps = {}, Progress(), []
     previous_memory = None
-    weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in ACTIONS])
+    buttons = actions(settings.turbo)
+    weights = np.array([settings.select_weight if a & button_mask("SELECT") else 1.0 for a in buttons])
     probabilities = weights / weights.sum()
-    action = rng.choice(len(ACTIONS), p=probabilities)
+    action = rng.choice(len(buttons), p=probabilities)
     if last_action is not None and rng.random() < settings.momentum:
         action = last_action
     stale = 0
@@ -126,8 +128,8 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
         if rng.random() > repeat_probability:
-            action = rng.choice(len(ACTIONS), p=probabilities)
-        emulator.run(ACTIONS[action], FRAMES_PER_STEP)
+            action = rng.choice(len(buttons), p=probabilities)
+        emulator.run(buttons[action], FRAMES_PER_STEP)
         pressed.append(action)
         state = emulator.save()
         memory = emulator.view(state)
