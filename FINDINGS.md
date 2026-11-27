@@ -1257,3 +1257,13 @@ the state-level danger prediction to choose which states to keep and explore fro
 - Rejected, 3 walls x 3 seeds at a 3M-frame budget (laptop, 8 workers): --stale-steps 40 (end tries after 40 quiet
   steps): no better, worse on lava. --fertility 1 (weight by 1 + children): worse on all three (e.g. Ridley door
   0.6/1.1/0.2M -> 2.2/2.1/0.5M); children are a consequence of being a stone, so weighting by them is rich-get-richer.
+- **Breadth test, simple/explainable ideas** (offline, 30.7K states / 115 rooms from 11 runs; 30 runs for frontier;
+  heuristic/breadth/). Rooms (purity / ids per room): scene-change bytes refit 70% / 9.3 (best); tile bag 43-52% /
+  3-5 (tiles reused across corridors, columns stream in); scene cuts + tile bag 64% / 2.1 (RAM bursts of 300+ bytes
+  mark doors; the nametable is rewritten column by column, never at once); save-tree clusters 63-75% / 23-31.
+  Background palette and a CHR-RAM checksum: 100% pure AREA ids, free. Not room-based: slow bytes give one knob from
+  ~4 to ~360 effective ids per run. Frontier (stone AUC): descendants 0.97 (0.94 using only info known 25% into the
+  run), children 0.93, found-new rate 0.74, "generations since the tile bag last changed" (fewer = higher) 0.73 and
+  0.75-0.78 for the first success itself (no hindsight); zlib novelty 0.50-0.57 (stones are old hubs, not novel
+  states). Note --fertility (children) already lost a live race; to race: milder descendants weight, and
+  generations-since-scenery-change.
