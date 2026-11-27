@@ -75,6 +75,9 @@ class Settings:
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
+    # Split a place when it earns it (crowding version): >0 starts each place as a coarse scroll block (8x the scheme's
+    # block) and splits it into finer ones once play has landed in it on this many steps, down to the scheme's block.
+    place_split: int = 0
 
 
 def location(memory, settings):
@@ -177,7 +180,7 @@ def room_of(place):
     """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
     if place[0] == "record":
         return place[1]
-    return place if place[0] in ("screen", "scroll", "level", "radius") else tuple(place[:3])
+    return place if place[0] in ("screen", "scroll", "level", "radius", "split") else tuple(place[:3])
 
 
 @dataclass
@@ -214,6 +217,29 @@ WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
 _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
+
+
+SPLIT_LEVELS = 4  # a split place's block is the scheme's block times 1, 2, 4 or 8
+_crowding = {}  # per worker process: steps landed in each split cell (level, coordinates), for Settings.place_split
+
+
+def split_cell(position, memory, settings, level):
+    player = tuple(int(memory[int(b)]) // (player_step(settings) << level) for b in settings.player_bytes.split(",") if b)
+    return ("split", level) + tuple(p // (scroll_block(settings) << level) for p in position) + player
+
+
+def ancestors(place, extra):
+    """The coarser cells (level, coordinates) a split place sits inside, itself included."""
+    level, cell = place[1], place[2:len(place) - len(extra)]
+    return [(level + up,) + tuple(c >> up for c in cell) for up in range(SPLIT_LEVELS - level)]
+
+
+def split_place(position, memory, settings, crowding):
+    """The finest cell, coarse to fine, whose parent has earned a split (play landed there Settings.place_split times)."""
+    level = SPLIT_LEVELS - 1
+    while level > 0 and crowding.get(split_cell(position, memory, settings, level)[1:], 0) >= settings.place_split:
+        level -= 1
+    return split_cell(position, memory, settings, level)
 
 
 def nearest_center(feature, centers, radius):
@@ -278,6 +304,10 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
             extra = _extras(emulator, settings).part(state, memory, carry, probe_block, position)
             place = scroll_place(position, settings) + player_part(memory, settings) + extra
+            if settings.place_split:
+                place = split_place(position, memory, settings, _crowding) + extra
+                for ancestor in ancestors(place, extra):
+                    _crowding[ancestor] = _crowding.get(ancestor, 0) + 1
             if settings.place_radius:
                 feature = np.array(tuple(position) + tuple(int(memory[int(b)]) for b in settings.player_bytes.split(",") if b), np.int64)
                 nearest = nearest_center(feature, centers, settings.place_radius)
