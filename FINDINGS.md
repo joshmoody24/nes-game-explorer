@@ -1226,3 +1226,13 @@ the state-level danger prediction to choose which states to keep and explore fro
   Missiles and energy never peak in the same save; best joint stock found: 91 missiles / 149 energy at (11,8)
   (Metroid shaft drops), 108 / 179 at (11,4). Near Mother Brain every save fails the idle-health check (turrets and
   Rinkas drain), so the ratchet picker fell back to poor saves.
+- **GAME BEATEN by the method, no cheats (2026-11-26).** No edited RAM in any link of the chain (only diagnostic
+  probes used edits, never fed back). Mother Brain: rich arrival from farming the column-10 Metroid shaft (127
+  missiles / 284 energy, stay-limited farm layer), crossing to (11,4) with 126 / 308, then ratchet layers from the
+  most-hits save (pick: hits, then missiles/60 and energy/200): hits 9 -> 17 -> 24 -> 30, then a layer from a 29-hit
+  save (7 missiles, 32 energy) killed her ($98 = 6, time bomb set). Escape layer (no stay): up the x=1 shaft to the
+  game-end elevator, $6883 = 1 in 128 saves, credits in 4 (cache/ending-honest.state; items 0x95, statues 130/130).
+  **Hand-made parts that still need generalizing:** choosing every layer's start save (pick_layer / pick_joint /
+  mbr / ratchet scoring), --stay cell lists in Tourian (Zebetites, Mother Brain, the Metroid farm), the Metroid-specific
+  hand-made place and energy/missile bytes, TURBO as an env flag, and the walkthrough/map knowledge I used to aim
+  autopsies (never fed to the explorer).
