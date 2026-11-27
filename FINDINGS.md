@@ -1236,3 +1236,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   mbr / ratchet scoring), --stay cell lists in Tourian (Zebetites, Mother Brain, the Metroid farm), the Metroid-specific
   hand-made place and energy/missile bytes, TURBO as an env flag, and the walkthrough/map knowledge I used to aim
   autopsies (never fed to the explorer).
+- **autochain** (no hand-picked saves): from the post-Ridley save, back to Brinstar in 15 x 3-min chunks (138 rooms) vs 6
+  chunks with hand picks. First version relayered from the best-holdings save among places added in the last chunk:
+  it picked Ridley lair (wasted 3 chunks). Fixed rule: healthiest best-holdings save in the most recently discovered
+  room (offline check on the stalled archive: lands at (21,29), next to the hand pick (20,30)). Remaining slowness:
+  the "no new room" stall test never fires while side rooms trickle in.
