@@ -307,6 +307,8 @@ def parse_arguments():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--resume", help="start from this run's checkpointed archive")
     parser.add_argument("--skip-worn", action="store_true", help="don't keep new saves in rooms history wore out (more than the median room's history)")
+    parser.add_argument("--stop-when", help="a bench.py wall name: stop as soon as a new save passes that wall's success test")
+    parser.add_argument("--segments", type=int, default=0, help="stop after this many tries (for exact before/after comparisons); 0 = no limit")
     parser.add_argument("--familiar", default="", help="runs whose choices count as already spent here: novelty is judged against all earlier experience, not just this run")
     parser.add_argument("--start-state", help="a file holding a save state to explore from, instead of power-on")
     parser.add_argument("--stop-at-item", help="diagnostic: stop once progress shows this item (e.g. \"long beam\")")
@@ -359,6 +361,24 @@ def worn_rooms(familiar, start_place):
     return frozenset(r for r, n in rooms.items() if n > median and r != tuple(start_place[:3]))
 
 
+def location_tries(name, emulator):
+    """(permanent progress at the run's start, {location: tries}) for one earlier run, cached next to its archive
+    because decompressing a whole archive for these few numbers took seconds per run."""
+    run = Path("runs") / name
+    cache, checkpoint = run / "location_tries.pkl", run / "checkpoint.pkl.z"
+    if cache.exists() and cache.stat().st_mtime >= checkpoint.stat().st_mtime:
+        return pickle.loads(cache.read_bytes())
+    run_start = Path(json.loads((run / "config.json").read_text())["start_state"]).read_bytes()
+    saved = pickle.loads(zlib.decompress(checkpoint.read_bytes()))
+    counts = {}
+    for place, chosen in zip(saved["places"], saved["times_chosen"]):
+        if place[0] != "record":
+            counts[tuple(place[:LOCATION_SIZE])] = counts.get(tuple(place[:LOCATION_SIZE]), 0) + chosen
+    result = (permanent_progress(emulator.view(run_start)), counts)
+    cache.write_bytes(pickle.dumps(result))
+    return result
+
+
 def familiar_counts(run_names, start, emulator):
     """Choices earlier runs spent at each location, so this run's novelty is judged against earlier experience.
     Only runs that began with the same permanent progress count: a new item or a beaten boss can open up places
@@ -366,13 +386,10 @@ def familiar_counts(run_names, start, emulator):
     progress = permanent_progress(emulator.view(start))
     counts = {}
     for name in filter(None, run_names.split(",")):
-        run_start = Path(json.loads((Path("runs") / name / "config.json").read_text())["start_state"]).read_bytes()
-        if permanent_progress(emulator.view(run_start)) != progress:
-            continue
-        saved = pickle.loads(zlib.decompress((Path("runs") / name / "checkpoint.pkl.z").read_bytes()))
-        for place, chosen in zip(saved["places"], saved["times_chosen"]):
-            if place[0] not in ("record", "climb"):
-                counts[tuple(place[:LOCATION_SIZE])] = counts.get(tuple(place[:LOCATION_SIZE]), 0) + chosen
+        run_progress, run_counts = location_tries(name, emulator)
+        if run_progress == progress:
+            for location, n in run_counts.items():
+                counts[location] = counts.get(location, 0) + n
     return counts
 
 
@@ -424,11 +441,20 @@ def main():
     started = last_log = last_checkpoint = time.perf_counter()
     first_line = None  # the first metrics line, the baseline for --stop-at-gain
     deadline = started + args.minutes * 60
+    segments_done = 0
+    stop_test = None
+    if args.stop_when:
+        from bench import WALLS
+        stop_test = WALLS[args.stop_when][1]
     stall_window = args.stop_after_stall * 60 if args.stop_after_stall else None
     sizes = [(started, len(archive.places))]
     with open(run_dir / "metrics.jsonl", "a") as metrics:
         while time.perf_counter() < deadline:
             for worker_index, segment in explorers.finished():
+                segments_done += 1
+                if args.segments and segments_done >= args.segments:
+                    deadline = time.perf_counter()
+                    break
                 frames += segment.frames
                 progress.merge(segment.progress)
                 gaps.extend(segment.gaps)
@@ -439,6 +465,9 @@ def main():
                                                   None if start_path is None else start_path + segment.actions[:length - len(start_path)]))
                     if outcomes[-1]:
                         created.append(archive.last_slot)
+                        if stop_test and stop_test(emulator.view(state)):
+                            print(f"stopping: --stop-when {args.stop_when} passed after {time.perf_counter() - started:.0f}s", flush=True)
+                            deadline = time.perf_counter()
                         if settings.refill:
                             while len(archive.routes) < len(archive.states):
                                 archive.routes.append(())
@@ -522,7 +551,8 @@ def main():
     if progress.ever_up is not None:
         # Every bit ever seen turning on, and every bit ever seen turning off, over every step of the run.
         np.savez(run_dir / "bit_flips.npz", ever_up=progress.ever_up, ever_down=progress.ever_down)
-    print(json.dumps(line), flush=True)
+    if first_line is not None:
+        print(json.dumps(line), flush=True)
 
 
 if __name__ == "__main__":

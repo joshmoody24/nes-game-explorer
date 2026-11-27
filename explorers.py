@@ -296,9 +296,9 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                    frozenset(patterns), died)
 
 
-def worker(connection, settings, seed):
+def worker(connection, settings, seed, index):
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
-    rng = np.random.default_rng([seed, os.getpid()])
+    rng = np.random.default_rng([seed, index])  # by worker index, not pid, so a run can be reproduced exactly
     known = {}
     while (task := connection.recv()) is not None:
         start, start_state, start_path_length, last_action, updates = task
@@ -312,8 +312,8 @@ class Explorers:
         context = get_context("spawn")
         pipes = [context.Pipe() for _ in range(count)]
         self._connections = [main_end for main_end, _ in pipes]
-        self._processes = [context.Process(target=worker, args=(worker_end, settings, seed), daemon=True)
-                           for _, worker_end in pipes]
+        self._processes = [context.Process(target=worker, args=(worker_end, settings, seed, index), daemon=True)
+                           for index, (_, worker_end) in enumerate(pipes)]
         for process in self._processes:
             process.start()
         self._updates_sent = [0] * count
@@ -331,7 +331,9 @@ class Explorers:
         return [(self._connections.index(connection), connection.recv()) for connection in ready]
 
     def close(self):
-        for connection in self._connections:
-            connection.send(None)
+        """Ends the workers at once: their unfinished tries are thrown away, and waiting for each to finish cost
+        about a minute per run."""
         for process in self._processes:
-            process.join(timeout=5)
+            process.terminate()
+        for process in self._processes:
+            process.join()

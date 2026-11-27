@@ -3,8 +3,10 @@ Wall benchmark: for each wall of the winning route, explore from its start save 
 shared configuration, and record whether its success test holds, and how far into the archive the first success appears.
 Usage: python bench.py <name> <seed> [wall ...]   (config: BENCH_ARGS env, default below; TURBO env as usual)
 """
-import json, os, pickle, subprocess, sys, zlib
+import json, os, pickle, subprocess, sys, time, zlib
 from pathlib import Path
+import numpy as np
+
 from emulator import Emulator
 from explorers import ROM
 from metroid import MAP_X, MAP_Y, at
@@ -43,11 +45,13 @@ if __name__ == "__main__":
         start, test = WALLS[wall]
         run = f"bench/{name}/s{seed}/{wall}"
         familiar = ["--familiar", HISTORY[wall]] if HISTORY[wall] and os.environ.get("BENCH_HISTORY", "1") == "1" else []
-        subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", str(MINUTES), "--seed", str(seed), "--start-state", start] + args + familiar,
+        began = time.time()
+        subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", str(MINUTES), "--seed", str(seed), "--start-state", start, "--stop-when", wall] + args + familiar,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         states = pickle.loads(zlib.decompress((Path("runs") / run / "checkpoint.pkl.z").read_bytes()))["states"]
         first = next((i for i, s in enumerate(states) if test(emulator.view(s))), None)
-        results[wall] = None if first is None else round(first / len(states), 3)
-        print(f"{name} seed {seed} {wall}: " + ("not broken" if first is None else f"broken; first success at {results[wall]:.0%} of the archive"), flush=True)
+        frames = int(np.load(Path("runs") / run / "segments.npz")["frames"].sum())
+        results[wall] = None if first is None else {"seconds": round(time.time() - began), "frames": frames, "play hours": round(frames / 60 / 3600, 2)}
+        print(f"{name} seed {seed} {wall}: " + ("not broken" if first is None else f"broken in {results[wall]['seconds']}s, {results[wall]['frames'] / 1e6:.1f}M frames = {results[wall]['play hours']} hours of play"), flush=True)
     out = Path("runs/bench") / name / f"s{seed}.json"; out.write_text(json.dumps(results))
     print(name, seed, "broke", sum(1 for v in results.values() if v), "of", len(results), "walls")
