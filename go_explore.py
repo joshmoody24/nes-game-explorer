@@ -45,8 +45,8 @@ class Archive:
     familiar: dict = field(default_factory=dict)  # location -> choices earlier runs spent there (--familiar)
     worn_rooms: frozenset = frozenset()  # rooms history wore out (--skip-worn): new saves there aren't kept
     parents: list = field(default_factory=list)  # archive index of the visit whose segment found this one (-1: start)
-    # Buttons (indices into controls.actions(Settings.turbo)) from the start state to the kept state: every visit has a replayable
-    # route. None for places resumed from an older run, which didn't keep paths.
+    # Buttons (indices into controls.actions(Settings.turbo)) from the start state to the kept state: every visit
+    # has a replayable route. None for places resumed from an older run, which didn't keep paths.
     paths: list = field(default_factory=list)
     holdings: list = field(default_factory=list)  # see explorers.holdings
     active: list = field(default_factory=list)  # False once another visit to the same place beats it
@@ -77,7 +77,6 @@ class Archive:
             self.states[slot], self.paths[slot], self.holdings[slot] = state, path, held
             self.parents[slot] = parent
             self.updates.append((place, visit))
-            self.last_slot = slot
             return "better"
         self.place_numbers.setdefault(choice_group(place), len(self.place_numbers))
         self.index.setdefault(place, []).append(len(self.places))
@@ -88,7 +87,6 @@ class Archive:
         self.paths.append(path)
         self.holdings.append(held)
         self.active.append(True)
-        self.last_slot = len(self.places) - 1
         self.deaths.append(0)
         self.productive.append(0)
         self.updates.append((place, visit))
@@ -156,8 +154,8 @@ class Recordings:
     """
     Button sequences of sampled segments, saved as trajectories.npz: for recording i, the segment started
     from archive index start[i] (whose state had checksum start_checksum[i]) and pressed
-    actions[offsets[i]:offsets[i + 1]] (indices into controls.actions(Settings.turbo)). Emulation is deterministic, so
-    replaying those buttons from that state regenerates every frame.
+    actions[offsets[i]:offsets[i + 1]] (indices into controls.actions(Settings.turbo)). Emulation is
+    deterministic, so replaying those buttons from that state regenerates every frame.
     """
 
     def __init__(self):

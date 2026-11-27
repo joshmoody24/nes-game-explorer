@@ -81,7 +81,7 @@ class Segment:
     progress: Progress
     frames: int
     gaps: list  # for each new place, steps since the previous new place (or since the segment began)
-    actions: bytes  # index into controls.actions(Settings.turbo) for every step taken, so the segment can be replayed exactly
+    actions: bytes  # index into controls.actions(Settings.turbo) for every step, so it can be replayed exactly
     start_checksum: int  # zlib.crc32 of the start state; a replay is only valid from a state that matches
     died: bool = False  # ended in game over
 
@@ -101,7 +101,7 @@ def beats(a, b):
     return all(x >= y for x, y in zip(held_a, held_b)) and (held_a != held_b or length_a <= length_b)
 
 
-RARE_CHANGE_RATE = 0.002  # bytes changing on fewer steps than this count toward change patterns
+RARE_CHANGE_RATE = 0.002  # bytes changing on fewer steps than this count as rarely changing (see novel_values)
 WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
 _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
@@ -146,7 +146,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     # Only isolated changes: a hit lowers hit points in one jump; moving things change step after step.
                     rare_values = [(int(b), int(full_memory[b])) for b in rare if not changed_before[b]]
         previous_memory = full_memory
-        if (memory[GAME_MODE] == GAME_OVER or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay)):
+        if memory[GAME_MODE] == GAME_OVER or (stay and (int(memory[MAP_Y]), int(memory[MAP_X])) not in stay):
             died = True
             break
         place = hand_made_place(memory, settings) + ((zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ())
