@@ -1293,3 +1293,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   stalled chunk found): 12 layers, rooms grow steadily to 48 - it never throws away the frontier. Structural win at
   equal compute, and it removes the hand pick. Continuing the multi-start chain with 12 workers (ac-multi2).
   Note: the stall test counts record places, hundreds per chunk, so it fires about every other chunk.
+- **Multi-start chain continued** (ac-multi2, 12 workers, ~6M frames per chunk; ~156M frames total incl. ac-multi):
+  rooms 48 -> 49, then flat for 6 chunks; reached (25,27), one cell short of (25,26), the grey-block step before the
+  Ridley-lair exit door that also stalled the hand-run chain (which used ~144M frames to reach (25,26), then a layer at
+  that frontier). So no-picking got about as far on similar compute, then stalled at the same wall. The stall test is
+  noisy (record places count as discoveries), so layers restart every other chunk even while rooms are flat.
+- **Laptop throttled:** Ryzen 7840HS at ~950 MHz under load (below its 1.1 GHz minimum; boost on, performance
+  profile, 41-44 C, 65 W charger) => ~3K emulator frames/s per process vs ~20K per worker on the unit. Hardware/
+  firmware throttle (EC/PROCHOT); fixing it could give the laptop ~4-5x compute. Needs Josh.
