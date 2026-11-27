@@ -1249,3 +1249,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   heuristic/ (laptop) has the scripts. Speed: shutdown 55.7 -> 1.6 s per run, history cache 70.6 -> 1.5 s,
   weights() 72 -> 27 ms at 62K visits; reproducible runs (worker seeds by index, identical fingerprints across
   machines); --max-frames budget; cleanup redone (go_explore + explorers 898 -> 604 lines).
+- **Stepping stones** (ancestors of the first success, 21 fresh bench runs): chains of 6-25 saves; they got 1-17%
+  (typically 2-9%) of all tries, ~1.5-2x their fair share. So >90% of tries go to saves that never lead anywhere: the
+  upper bound for a better chooser. Feature AUC for "is a stone": children created 0.89, times chosen 0.62,
+  found-new rate 0.61, holdings 0.51, path length 0.34 (stones are early), deaths/try 0.21 (stones die more), record
+  place 0.01 (never). heuristic/stones/.
+- Rejected, 3 walls x 3 seeds at a 3M-frame budget (laptop, 8 workers): --stale-steps 40 (end tries after 40 quiet
+  steps): no better, worse on lava. --fertility 1 (weight by 1 + children): worse on all three (e.g. Ridley door
+  0.6/1.1/0.2M -> 2.2/2.1/0.5M); children are a consequence of being a stone, so weighting by them is rich-get-richer.
