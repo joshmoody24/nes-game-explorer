@@ -63,6 +63,7 @@ class Settings:
     place_scheme: str = "hand"
     # memory() indices of the player's position, comma-separated; go_explore fills it in (see contingency.py).
     player_bytes: str = ""
+    player_per_axis: int = 2  # how many controller-driven bytes per direction contingency picks (copies add places)
     # Experimental add-ons to scroll places, comma-separated (see place_extras.py), and what they learned at run start.
     place_extras: str = ""
     byte_picker: str = "sticky"

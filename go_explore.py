@@ -339,7 +339,7 @@ def main():
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     start = Path(args.start_state).read_bytes() if args.start_state else start_game(emulator)
     if player_step(settings) and not settings.player_bytes:
-        found = player_bytes(emulator, start, np.random.default_rng(args.seed), settings.turbo)
+        found = player_bytes(emulator, start, np.random.default_rng(args.seed), settings.turbo, settings.player_per_axis)
         settings = dataclasses.replace(settings, player_bytes=",".join(map(str, found)))
         print(f"player bytes (by contingency): {settings.player_bytes}", flush=True)
     if settings.place_extras:
