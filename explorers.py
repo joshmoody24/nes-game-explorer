@@ -73,6 +73,7 @@ class Settings:
     # Every grid size at once: >1 files each save under this many scroll places, the block (and player step) doubling
     # each level ("level", L, ...). A save is new if new at any level; go_explore shares attention evenly across levels.
     place_levels: int = 1
+    level_player: bool = True  # with place_levels: the player step doubles per level too (False keeps it fixed)
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
@@ -373,7 +374,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     nearest = len(keys) - 1
                 place = keys[nearest] + extra
             levels = [("level", level) + tuple(p // (scroll_block(settings) << level) for p in position)
-                      + tuple(v // (player_step(settings) << level) for v in (int(memory[int(b)]) for b in settings.player_bytes.split(",") if b))
+                      + tuple(v // (player_step(settings) << (level if settings.level_player else 0)) for v in (int(memory[int(b)]) for b in settings.player_bytes.split(",") if b))
                       + extra for level in range(settings.place_levels)] if settings.place_levels > 1 else [place]
         elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
