@@ -1448,3 +1448,7 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Column-11 tries:** levels-coarse kept ~2,135 saves in shaft rows 19-24 but tried them only 69x (hand ~470 saves,
   522 tries); 2% of its tries were in Norfair vs hand 22%. Not a selection bug: it found Norfair only halfway through
   its archive, and per level 8-23% of its places are there. Generic is just slower to reach the elevator.
+- **Pixel dead reckoning ~= hardware** (8 seeds vs hand, 4 walls): levels-pixel 17/32 walls (lava 3/8 = hand,
+  ridley-door median 0.36M fastest of all), -3.6 map cells/run vs levels-coarse -4.6. Needs only the picture, so it is
+  the more general choice; neither beats hand. Next: gap diagnostics (true player bytes; DR instead of map cell;
+  hand without inventory).
