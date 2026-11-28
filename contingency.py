@@ -65,3 +65,21 @@ def x_is_scrolled(emulator, saves, x_byte):
             target = (value - scroll_x) % 256 if scrolled else value
             hits[scrolled] += int(np.abs(sprites[:, 3].astype(int) - target).min() <= 8)
     return hits[True] > hits[False]
+
+
+def y_is_scrolled(emulator, saves, x_byte, y_byte, x_scrolled):
+    """Like x_is_scrolled for the height byte: the sprite nearest the player's screen x is the player; does its height
+    line up better with the raw byte or with byte - scroll y? Games needn't use the same convention on both axes."""
+    hits = {False: 0, True: 0}
+    for state in saves:
+        sprites = np.frombuffer(emulator.block(state, "SPRT"), np.uint8).reshape(64, 4)
+        sprites = sprites[sprites[:, 0] < 0xEF]
+        if not len(sprites):
+            continue
+        view, (scroll_x, scroll_y) = emulator.view(state), emulator.scroll(state)
+        screen_x = (int(view[x_byte]) - scroll_x) % 256 if x_scrolled else int(view[x_byte])
+        player = sprites[np.abs(sprites[:, 3].astype(int) - screen_x).argmin()]
+        for scrolled in hits:
+            height = (int(view[y_byte]) - scroll_y) % 240 if scrolled else int(view[y_byte])
+            hits[scrolled] += int(abs(int(player[0]) - height) <= 16)
+    return hits[True] > hits[False]

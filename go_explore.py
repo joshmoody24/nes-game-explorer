@@ -22,7 +22,7 @@ import numpy as np
 
 from emulator import Emulator
 import place_extras
-from contingency import player_bytes, varied_saves, x_is_scrolled
+from contingency import player_bytes, varied_saves, x_is_scrolled, y_is_scrolled
 from explorers import ROM, Explorers, Settings, beats, hand_made_place, holdings, place_of_state, player_step
 from metroid import permanent_progress, start_game
 from progress import Progress
@@ -373,7 +373,10 @@ def main():
         if settings.player_y_sprite or settings.player_world or settings.compass or settings.ruler:
             saves = varied_saves(emulator, start, np.random.default_rng(args.seed + 1), 60, settings.turbo)
             settings = dataclasses.replace(settings, player_x_scrolled=x_is_scrolled(emulator, saves, found[0]))
-            print(f"player x byte counts on the background: {settings.player_x_scrolled}", flush=True)
+            if len(found) > 1 and settings.player_world:
+                y_scrolled = y_is_scrolled(emulator, saves, found[0], found[1], settings.player_x_scrolled)
+                settings = dataclasses.replace(settings, player_y_screen=settings.player_y_screen or not y_scrolled)
+            print(f"player x byte counts on the background: {settings.player_x_scrolled}; y byte on the screen: {settings.player_y_screen}", flush=True)
         print(f"player bytes (by contingency): {settings.player_bytes}", flush=True)
     if settings.place_extras:
         share = np.load("cache/poke_share.npy") if settings.byte_picker == "poke" else None
