@@ -27,6 +27,7 @@ MAX_BATCHES = int(os.environ.get("COMPARE_MAX_BATCHES", 4))
 MAX_FRAMES = int(float(os.environ.get("BENCH_MAX_FRAMES", 2e6)))
 MARGIN = 0.25  # walls per seed: a smaller difference isn't worth having
 MIN_SEEDS_TO_REJECT = 30
+RUN_MEMORY = os.environ.get("COMPARE_RUN_MEMORY", "1500M")  # per run: a scheme whose places explode kills only itself
 COMMON = "--turbo --repeat-probability 0.99 --repeat-spread 0.09 --novel-values --keep-more 4217,263 --workers 1"
 
 
@@ -38,10 +39,13 @@ def run_once(name, label, args, wall, seed):
     if cached.exists():  # a rerun of the same comparison reuses finished runs (they are exactly reproducible)
         return json.loads(cached.read_text())["frames"]
     start, test = WALLS[wall]
-    subprocess.run(["python", "-u", "go_explore.py", run, "--minutes", "60", "--seed", str(seed), "--start-state", start,
+    subprocess.run(["tools/capped", RUN_MEMORY, "python", "-u", "go_explore.py", run, "--minutes", "60", "--seed", str(seed), "--start-state", start,
                     "--stop-when", wall, "--max-frames", str(MAX_FRAMES)] + COMMON.split() + args.split(),
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "PYTHONHASHSEED": "0"})
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                   env={**os.environ, "PYTHONHASHSEED": "0", "LONG": "compare run", "LONG_MINUTES": "20"})
     if not (directory / "checkpoint.pkl.z").exists():
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text(json.dumps({"frames": "crashed"}))  # e.g. killed at RUN_MEMORY: counts as not breaking the wall
         return "crashed"
     emulator = Emulator(os.environ["QUICKNES_CORE"], ROM)
     states = pickle.loads(zlib.decompress((directory / "checkpoint.pkl.z").read_bytes()))["states"]
