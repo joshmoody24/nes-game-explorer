@@ -97,10 +97,13 @@ class Settings:
     # Drunkard's ruler: each room's cell size per axis is how far tries started there typically travel along it (median
     # of the last RULER_TRIES, rounded to a power of two in 8..256 px), on the player's world position.
     ruler: bool = False
-    # Milestones: how many rarely changing bytes (novel_values' rare bytes that have changed at least once) now differ
-    # from the run's start state is part of the place, so new inventory (an item picked up, a capacity raised) makes
-    # places new again, as hand places' items fields do. Needs novel_values; uses reference_state as the start.
+    # Milestones: how many inventory-like bytes now differ from the run's start state is part of the place, so new
+    # inventory (an item picked up, a capacity raised) makes places new again, as hand places' items fields do.
+    # Inventory-like = novel_values' rare bytes never seen back at their start value and with few distinct values.
     milestones: bool = False
+    # Milestones in the keep rule instead of the place: a save holding more inventory-like changes beats one holding fewer
+    # in the same place (like more missiles), so a save with a new item replaces old ones instead of being dropped.
+    milestone_holdings: bool = False
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
@@ -318,7 +321,8 @@ def beats(a, b):
 RARE_CHANGE_RATE = 0.002  # bytes changing on fewer steps than this count as rarely changing (see novel_values)
 WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
-_milestone_bytes = set()  # per worker process: rare bytes seen to change (Settings.milestones)
+_milestone_bytes, _milestone_values, _not_milestones = set(), {}, set()  # per worker process (Settings.milestones)
+MILESTONE_VALUES = 3  # a byte taking more values than this is a counter or a state, not inventory
 _reference_memory = None
 _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
@@ -467,8 +471,20 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
             extra = _extras(emulator, settings).part(state, memory, carry, probe_block, position)
             if settings.milestones:
-                _milestone_bytes.update(b for b, _ in rare_values)
-                extra = extra + (sum(int(full_memory[b] != _reference_memory[b]) for b in _milestone_bytes),)
+                # Inventory-like bytes only: rare, never seen back at their start value, few distinct values.
+                for b, value in rare_values:
+                    if b in _not_milestones:
+                        continue
+                    seen = _milestone_values.setdefault(b, set())
+                    seen.add(value)
+                    if value == _reference_memory[b] or len(seen) > MILESTONE_VALUES:
+                        _not_milestones.add(b)
+                        _milestone_bytes.discard(b)
+                    else:
+                        _milestone_bytes.add(b)
+                milestone_count = sum(int(full_memory[b] != _reference_memory[b]) for b in _milestone_bytes)
+                if not settings.milestone_holdings:
+                    extra = extra + (milestone_count,)
             values = player_values(emulator, state, memory, settings)
             if settings.player_world:
                 values, at = (), world_position(position, emulator.scroll(state), memory, settings)
@@ -501,6 +517,8 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         place += (zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ()
         length = start_path_length + step + 1
         held = holdings(memory, settings)
+        if scrolling and settings.milestones and settings.milestone_holdings:
+            held = held + (milestone_count,)
         offers = [(offered, held) for offered in (levels if scrolling else [place])]
         if scrolling and settings.ruler:
             world = world_position(position, emulator.scroll(state), memory, settings)
