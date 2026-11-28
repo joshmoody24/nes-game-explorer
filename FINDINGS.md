@@ -1474,3 +1474,6 @@ the state-level danger prediction to choose which states to keep and explore fro
   680-760) and needs ~3x the tries at the climb cell (24,25): 303-433 vs 95-163. With equal attention per level, 3/4 of
   tries go to the fine levels' hundreds of near-duplicate places low in the shaft. New --coarse-bias b: level L's share
   of attention ~ b**L. Testing b=2, 4 (+ per-place productivity).
+- **Coarse bias rejected for ridley-exit** (8 seeds vs hand): G50 7/8 exit, b2 4/8, b4 2/8, b4+pp 3/8 (walls -0.38,
+  -0.88, -0.88). The fine levels do the useful work at the climb; the hypothesis that they waste tries was wrong.
+  Trying a fine bias (b=0.5, 0.25).
