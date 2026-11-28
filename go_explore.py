@@ -58,6 +58,7 @@ class Archive:
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     place_of: list = field(default_factory=list)  # each visit's place_numbers entry, kept as visits are added
+    choice_power: float = 0.5  # a save's weight falls as 1 / (1 + times chosen) ** this (Go-Explore: 0.5)
     place_level: list = field(default_factory=list)  # each place number's grid level (Settings.place_levels), else 0
     positions: list = field(default_factory=list)  # each visit's exact dead-reckoned position (scroll places), or None
     children: list = field(default_factory=list)  # saves each visit's tries created
@@ -141,7 +142,7 @@ class Archive:
         active = np.array(self.active)
         place_of = np.array(self.place_of)
         visits_per_place = np.bincount(place_of, weights=active)
-        weights = active / np.sqrt(1 + np.array(self.times_chosen)) / np.maximum(visits_per_place[place_of], 1)
+        weights = active / (1 + np.array(self.times_chosen)) ** self.choice_power / np.maximum(visits_per_place[place_of], 1)
         if any(self.place_level):
             # Every grid size at once: each level gets an equal share, split over that level's places.
             level = np.array(self.place_level)
@@ -247,6 +248,7 @@ def parse_arguments():
     parser.add_argument("--stop-when", help="a bench.py wall name: stop as soon as a new save passes that wall's success test")
     parser.add_argument("--descendants", type=float, default=0.0, help="weight visits by (1 + saves descended from them) ** this; 0 is off")
     parser.add_argument("--scenery-recency", type=float, default=0.0, help="weight visits by 1 / (1 + generations since their scenery changed) ** this; 0 is off")
+    parser.add_argument("--choice-power", type=float, default=0.5, help="weight saves by 1 / (1 + times chosen) ** this")
     parser.add_argument("--fertility", type=float, default=0.0, help="weight visits by (1 + saves their tries created) ** this; 0 is off")
     parser.add_argument("--max-frames", type=int, default=0, help="stop after this many emulated frames (a budget that means the same on any machine); 0 = no limit")
     parser.add_argument("--segments", type=int, default=0, help="stop after this many tries (for exact before/after comparisons); 0 = no limit")
@@ -360,6 +362,7 @@ def main():
         archive.offer(place_of_state(emulator, start, settings), start, holdings(memory, settings), path=b"")
     archive.familiar = familiar_counts(args.familiar, start, emulator)
     archive.fertility = args.fertility
+    archive.choice_power = args.choice_power
     archive.descendant_weight = args.descendants
     archive.scenery_recency = args.scenery_recency
     if args.skip_worn and archive.familiar:
