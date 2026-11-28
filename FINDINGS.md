@@ -1417,3 +1417,15 @@ the state-level danger prediction to choose which states to keep and explore fro
   (-0.62 to +0.38), 0.0 map cells/run (+-1.3). Faster at ridley-door (0.48M vs 0.66M), slower at ridley-exit (1.70M vs
   0.72M), lava 2/8 vs 3/8. radius24 matched hand on lava (3/8). It works because it never picks one grid: lava wanted
   coarse places, ridley-exit finer. Confirming with 16 seeds plus wider spans (16-256 px; 8-128 px).
+- **Levels confirmation, 16 seeds:** levels-coarse 31/48 vs hand 37/48 (-0.38, -0.81 to +0.06), the gap mostly
+  ridley-exit (11/16 vs 15/16, 1.70M vs 0.61M). Wider spans worse (16-256 px -0.69; 8-128 px -0.69).
+- **Breadth check** (kraid-shaft, column-11, ice-beam, tourian-entry; 4 seeds): neither scheme breaks them in 2M, but
+  hand reaches 22.6 more map cells/run (-30.1 to -14.4). Column-11 diagnosis: levels-coarse kept 47,109 saves (31,696 at
+  its finest level) vs hand 3,020, and reached 30 map cells vs 43; its probe picked byte 516 for height, not Samus y.
+- **Tuning screen** (8 seeds vs hand): lv-fixp32-wide (levels over 16-128 px blocks, player fixed at 32 px) beat hand on
+  lava (4/8 vs 3/8) and reached MORE map cells (+1.1, +0.2 to +2.2): the first generic scheme to out-explore hand, but
+  ridley-exit 4/8 vs 8/8. Settings with fine player height pass ridley-exit; fixed 32 px ones don't.
+- **Contingency height is the weak link:** up-down scores are 0.25-0.42 everywhere (left-right 0.95), and at column 11
+  junk byte 516 edges Samus y 0.27 to 0.25. New --player-y-sprite: height from the hardware sprite nearest the player's
+  x. The x byte counts on the background (screen x = byte - scroll x gives a sprite within 8 px in 94% of saves vs 69%);
+  go_explore detects the convention at run start. Sprite height vs Samus y: correlation 0.63.
