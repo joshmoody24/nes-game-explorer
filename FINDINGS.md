@@ -1524,3 +1524,6 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Milestones in the place explode it** (146-165K places; 63K even when restricted to inventory-like bytes, i.e. never
   back at start value, <=3 values). Moved into the keep rule instead (--milestone-holdings): ~11K saves in 1.5M frames,
   Morph Ball picked up. Testing on the first shaft.
+- **Milestone holdings don't fix the first shaft** (2 seeds, 4M frames): Morph Ball first held at saves 3,629 / 5,481
+  (hand: save 114), 9-25 saves hold it, 4-7 in ball form, no pass. The item isn't thrown away; generic exploration just
+  reaches it far later. Open: why (it sits one map cell left of the start).
