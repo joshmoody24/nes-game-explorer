@@ -78,6 +78,9 @@ class Settings:
     # each level ("level", L, ...). A save is new if new at any level; go_explore shares attention evenly across levels.
     place_levels: int = 1
     level_player: bool = True  # with place_levels: the player step doubles per level too (False keeps it fixed)
+    # Every grid shape at once: "B1xP1,B2xP2,..." files each save under every listed grid (scroll block B px, player
+    # step P px), attention shared evenly across grids like place_levels. Overrides place_levels when set.
+    place_grids: str = ""
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
@@ -292,6 +295,14 @@ def split_cell(position, values, settings, level):
     return ("split", level) + tuple(p // (scroll_block(settings) << level) for p in position) + player
 
 
+def grids(settings):
+    """The (scroll block, player step) of each grid a save is filed under (see place_grids and place_levels)."""
+    if settings.place_grids:
+        return [tuple(int(v) for v in grid.split("x")) for grid in settings.place_grids.split(",")]
+    return [(scroll_block(settings) << level, player_step(settings) << (level if settings.level_player else 0))
+            for level in range(settings.place_levels)]
+
+
 def ancestors(place, extra):
     """The coarser cells (level, coordinates) a split place sits inside, itself included."""
     level, cell = place[1], place[2:len(place) - len(extra)]
@@ -390,9 +401,8 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     centers = np.vstack([centers, feature])
                     nearest = len(keys) - 1
                 place = keys[nearest] + extra
-            levels = [("level", level) + tuple(p // (scroll_block(settings) << level) for p in position)
-                      + tuple(v // (player_step(settings) << (level if settings.level_player else 0)) for v in values)
-                      + extra for level in range(settings.place_levels)] if settings.place_levels > 1 else [place]
+            levels = [("level", level) + tuple(p // block for p in position) + tuple(v // step for v in values) + extra
+                      for level, (block, step) in enumerate(grids(settings))] if len(grids(settings)) > 1 else [place]
         elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
         else:
