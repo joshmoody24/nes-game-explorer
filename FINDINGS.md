@@ -1391,3 +1391,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   size alone (scroll:32,32 0/15, scroll:8,32 1/15). One run each: hand kept 1,077 saves over 20 map cells and went
   down the shaft at column 24 into Ridley's area; scroll:8,32 kept 6,171 saves in 5 corridor cells (~1,500 per cell
   vs ~100) and never reached column 24. Too fine again: the 4 contingency bytes multiply with the 8 px blocks.
+- **Round 1 verdicts (30 paired seeds vs scroll:8,32; walls/seed):** worse = sticky -0.70, cuts -0.80, cast -0.53,
+  fuzzy -0.47, patch -0.80 (all intervals below 0); no difference = area 0.00 (+-0.20); undecided = poke 0.00
+  (+-0.27; ridley-exit median 0.97M vs 1.59M), burst -0.13 (-0.30 to +0.03). Every loser adds fast-changing detail
+  (enemy sprites, hash bits, timer bits, local tiles) -> finer places, the same failure as the lava corridor.
