@@ -1496,3 +1496,7 @@ the state-level danger prediction to choose which states to keep and explore fro
   (+0.25, -0.38 to +0.88) and +1.8 map cells/run (+0.7 to +3.1, significant): lava 8/8 vs 3/8, ridley-door 8/8 at
   0.38M vs 7/8 at 0.66M, ridley-exit 4/8 vs 8/8. Room-first also +1.8 cells but 11/32 walls (explores more, finishes
   less); compass 9/32; world32 9/32 (+1.9 cells). Confirming world-levels with 16 seeds.
+- **World-levels at 16 seeds:** 35/64 walls vs hand 39/64 (-0.25, -0.81 to +0.25) but +1.6 map cells/run (+0.8 to
+  +2.5): the better explorer (lava 14/16 vs 7/16, ridley-door 15/16 at 0.32M vs 0.50M) and worse on both shaft walls
+  (ridley-exit 6/16 vs 15/16, first-shaft 0/16 vs 2/16). Suspect: the height half of the world position (convention
+  taken from x). Testing --player-y-screen.
