@@ -1411,3 +1411,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   lava corridor: generic places ~10x too fine. Next: screen-sized dead-reckoning blocks (256/128/64 px) + player
   bytes in 32 px steps, the generic mirror of hand places (screen + position on it); possible now that saves carry
   exact positions.
+- **First generic scheme level with hand places** (8 paired seeds, lava + ridley-door + ridley-exit, 2M cap):
+  levels-coarse = `--place-scheme scroll:8,16 --place-levels 4 --player-per-axis 1` (every grid size at once: blocks
+  8-64 px, player steps 16-128, attention shared evenly across levels): 17/24 walls vs hand 18/24, -0.12 walls/seed
+  (-0.62 to +0.38), 0.0 map cells/run (+-1.3). Faster at ridley-door (0.48M vs 0.66M), slower at ridley-exit (1.70M vs
+  0.72M), lava 2/8 vs 3/8. radius24 matched hand on lava (3/8). It works because it never picks one grid: lava wanted
+  coarse places, ridley-exit finer. Confirming with 16 seeds plus wider spans (16-256 px; 8-128 px).
