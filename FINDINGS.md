@@ -1395,3 +1395,11 @@ the state-level danger prediction to choose which states to keep and explore fro
   fuzzy -0.47, patch -0.80 (all intervals below 0); no difference = area 0.00 (+-0.20); undecided = poke 0.00
   (+-0.27; ridley-exit median 0.97M vs 1.59M), burst -0.13 (-0.30 to +0.03). Every loser adds fast-changing detail
   (enemy sprites, hash bits, timer bits, local tiles) -> finer places, the same failure as the lava corridor.
+- **Screen of 12 ideas** (8 paired seeds vs scroll:8,32; ridley-door + ridley-exit; walls/seed, map cells/run):
+  clearly worse on both scores: afford -1.38/-2.5, reach -1.12/-2.9, oneway -0.62/-1.4, split50 -0.88/-3.3,
+  split200 -0.75/-2.9 (probes pay their frames; crowding splits end too fine). Level or better on something: player1
+  0.00 (ridley-door median 0.43M vs 0.98M), radius24 -0.12/+0.9 cells, radius12 0.00, groups -0.38 (best ridley-exit,
+  4/8), stitch -0.38/+0.5 cells (0/8 ridley-exit). Leaning worse: edges, levels (fine 4-32 px).
+- **Coarser places, laptop, 4 seeds vs hand:** scroll:16,64 player-per-axis 1 matched hand on lava (1/4 each; first
+  generic lava passes) but 2/4 vs 4/4 on ridley-exit; scroll:32 without the player part -5.1 cells/run. The player
+  part is essential; lava wants coarse, ridley-exit finer -> motivates every-grid-at-once spanning coarser sizes.
