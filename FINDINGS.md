@@ -1500,3 +1500,5 @@ the state-level danger prediction to choose which states to keep and explore fro
   +2.5): the better explorer (lava 14/16 vs 7/16, ridley-door 15/16 at 0.32M vs 0.50M) and worse on both shaft walls
   (ridley-exit 6/16 vs 15/16, first-shaft 0/16 vs 2/16). Suspect: the height half of the world position (convention
   taken from x). Testing --player-y-screen.
+- **Drunkard's ruler rejected** (8 seeds vs hand): ruler 5/32 walls (-1.62, -2.12 to -1.12), -2.1 cells/run; with
+  room-first 6/32. A room's cell size shifts as its median moves, re-labelling its saves as new: archive churn.
