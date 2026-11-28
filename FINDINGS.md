@@ -1429,3 +1429,6 @@ the state-level danger prediction to choose which states to keep and explore fro
   junk byte 516 edges Samus y 0.27 to 0.25. New --player-y-sprite: height from the hardware sprite nearest the player's
   x. The x byte counts on the background (screen x = byte - scroll x gives a sprite within 8 px in 94% of saves vs 69%);
   go_explore detects the convention at run start. Sprite height vs Samus y: correlation 0.63.
+- **Coarser level floor doesn't help** (8 seeds vs hand, +column-11): lv16-32 15/32 walls (-0.38) but -3.9 map
+  cells/run (-7.4 to -0.9); lv32 11/32 (-0.88); lv32-fix 8/32 (-1.25). The finest level is meant to be finer than hand
+  places; dropping it loses ground (mostly column 11).
