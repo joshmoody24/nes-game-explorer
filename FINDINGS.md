@@ -1527,3 +1527,8 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Milestone holdings don't fix the first shaft** (2 seeds, 4M frames): Morph Ball first held at saves 3,629 / 5,481
   (hand: save 114), 9-25 saves hold it, 4-7 in ball form, no pass. The item isn't thrown away; generic exploration just
   reaches it far later. Open: why (it sits one map cell left of the start).
+- **Correction:** in frames, generic reaches the Morph Ball cell at once and picks the ball up at ~0.1M frames (hand
+  0.03M); save indices misled (generic makes many more saves). The gap is after pickup: hand places flood with
+  ball-holding saves (items field makes every place new), generic keeps a trickle. Milestones in the place still explode
+  with a 1e-4 change-rate filter (counts in the hundreds): many RAM bytes are set once during the first room's setup and
+  look like inventory relative to power-on. Parked; needs a sharper definition of "new inventory".
