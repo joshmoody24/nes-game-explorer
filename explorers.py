@@ -67,6 +67,7 @@ class Settings:
     # Height from the player's sprite instead of the up-down byte: the visible hardware sprite nearest the player's x
     # byte gives y. The jump test that finds the up-down byte is weak (a jump comes back down); left-right is strong.
     player_y_sprite: bool = False
+    player_y_screen: bool = False  # diagnostic: the height byte is a screen y even when the x byte counts on the background
     player_x_scrolled: bool = False  # the x byte counts on the background, so screen x = x byte - scroll x (go_explore checks)
     # Experimental add-ons to scroll places, comma-separated (see place_extras.py), and what they learned at run start.
     place_extras: str = ""
@@ -221,7 +222,8 @@ def world_position(camera, scroll, memory, settings):
     """The player's position in the world: the dead-reckoned camera plus where the player is on screen."""
     on_screen = [int(memory[int(b)]) for b in settings.player_bytes.split(",") if b][:2]
     if settings.player_x_scrolled:
-        on_screen = [(v - s) % r for v, s, r in zip(on_screen, scroll, (256, 240))]
+        scrolled = [True, not settings.player_y_screen]
+        on_screen = [(v - s) % r if on else v for v, s, r, on in zip(on_screen, scroll, (256, 240), scrolled)]
     return tuple(c + o for c, o in zip(camera, on_screen + [0] * (2 - len(on_screen))))
 
 
