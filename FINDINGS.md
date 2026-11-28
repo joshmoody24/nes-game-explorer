@@ -1481,3 +1481,13 @@ the state-level danger prediction to choose which states to keep and explore fro
   (9/16 over 16 seeds, 2/8 on seeds 9-16): generic's true ridley-exit rate is ~50-60% vs hand ~94%, whatever the bias.
   Stopped knob-turning. Next: a fair head-to-head from power-on (no hand-picked walls or start saves), hand vs generic
   (levels-coarse, 50-step tries), 7 workers each, 40 minutes.
+- **Power-on head-to-head (40 min, 7 workers each, no hand-picked walls):** hand 82 rooms, Brinstar + Norfair, 10
+  missiles; generic levels-coarse/50-step 9 rooms, never left the first corridor (row 14 cells 1-9, >100K tries per
+  cell). The walls benchmark hid this. Single-run probes (10M frames): hand 15-16 rooms (with or without record
+  places), s256p32 10 rooms (reaches the door cell (14,10), 809 places), levels 9. Door entry is NOT a camera jump
+  (0-2 px moves), so dead reckoning doesn't alias there. New bench wall "first-shaft" (power-on -> map column 11).
+- **Quirky agent's ideas** (built): --room-first (attention per screen-room, then per place), --player-world (one
+  measurement per axis: dead-reckoned camera + player's on-screen offset; fixes the camera/x-byte double count),
+  --compass (8 places per room keeping the save that went furthest each way). Gravity test for the height byte
+  (falls steadily after releasing jump, minus no-jump): Samus y or copies top 3/4 starts, weak scores, no better than
+  the jump probe; not wired in.
