@@ -1445,3 +1445,6 @@ the state-level danger prediction to choose which states to keep and explore fro
   + poke bytes -4.9 cells/run. Adding detail to places keeps hurting.
 - **--pixel-scroll:** dead reckoning from frame-to-frame background shifts; ~3.4x slower per frame in Python (5.6K vs
   19.3K frames/s). Testing whether better vertical tracking closes the column-11 gap.
+- **Column-11 tries:** levels-coarse kept ~2,135 saves in shaft rows 19-24 but tried them only 69x (hand ~470 saves,
+  522 tries); 2% of its tries were in Norfair vs hand 22%. Not a selection bug: it found Norfair only halfway through
+  its archive, and per level 8-23% of its places are there. Generic is just slower to reach the elevator.
