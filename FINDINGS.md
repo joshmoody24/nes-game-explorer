@@ -1517,3 +1517,10 @@ the state-level danger prediction to choose which states to keep and explore fro
   every place new; generic places don't, so saves with the item land on old places and are dropped. (The "no
   inventory" diagnostic missed this: nothing is picked up on those walls.) New --milestones: number of rarely
   changing bytes now differing from the run's start, part of the place.
+- **Final comparison, 16 seeds, 4 walls:** world-auto 43/64 walls vs hand 39/64 (+0.25, -0.25 to +0.69) and +1.0 map
+  cells/run (+0.2 to +1.8, significant): lava 15/16 vs 7/16, ridley-door 15/16 at 0.32M vs 0.50M, ridley-exit 13/16 at
+  0.70M vs 15/16 at 0.61M, first-shaft 0/16 vs 2/16. The fully generic scheme explores significantly more and passes
+  more walls (not yet significant); it loses only where an item must be kept (first shaft).
+- **Milestones in the place explode it** (146-165K places; 63K even when restricted to inventory-like bytes, i.e. never
+  back at start value, <=3 values). Moved into the keep rule instead (--milestone-holdings): ~11K saves in 1.5M frames,
+  Morph Ball picked up. Testing on the first shaft.
