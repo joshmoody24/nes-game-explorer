@@ -1403,3 +1403,6 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Coarser places, laptop, 4 seeds vs hand:** scroll:16,64 player-per-axis 1 matched hand on lava (1/4 each; first
   generic lava passes) but 2/4 vs 4/4 on ridley-exit; scroll:32 without the player part -5.1 cells/run. The player
   part is essential; lava wants coarse, ridley-exit finer -> motivates every-grid-at-once spanning coarser sizes.
+- **Search re-tests on hand places** (paired, ridley-door + ridley-exit): at 4 seeds all looked >= hand, at 12 seeds
+  hand 23/24, fertility 20/24 (-0.25, -0.58 to 0.00), scenery recency 20/24 (-0.25, -0.67 to +0.17); descendants
+  level at 4 seeds. No sign of gain; the old rejections stand in spirit (intervals still touch 0, so not "worse").
