@@ -1452,3 +1452,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   ridley-door median 0.36M fastest of all), -3.6 map cells/run vs levels-coarse -4.6. Needs only the picture, so it is
   the more general choice; neither beats hand. Next: gap diagnostics (true player bytes; DR instead of map cell;
   hand without inventory).
+- **Gap diagnostics** (8 seeds vs hand, 4 walls; Metroid bytes only to locate the gap): C hand without inventory =
+  identical runs (inventory irrelevant here); A levels-coarse with Samus's true x/y bytes 14/32, -5.2 cells (the probe
+  isn't the weak link); B hand-like grain on dead reckoning (scroll:256 + true bytes //32) 14/32 but +1.6 cells (camera
+  position is no worse than the game's map cell for breadth). The gap isn't finding the player, dead reckoning or
+  inventory -> likely search settings co-tuned with hand places (Josh). Knob screen: keep rule, segment length,
+  choice power, record places, and a productivity weight (Josh: hill-climb saves that keep leading somewhere new).
