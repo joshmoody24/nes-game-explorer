@@ -85,6 +85,7 @@ class Settings:
     # Mutual-reachability places: 32-pixel scroll blocks merge into one group once play has moved both ways between
     # them; a place is (group, player part). One-way drops and locked doors stay group borders.
     place_groups: bool = False
+    hand_inventory: bool = True  # diagnostic: False drops items, tanks and missiles from hand-made places
 
 
 def location(memory, settings):
@@ -95,6 +96,8 @@ def location(memory, settings):
 
 def hand_made_place(memory, settings):
     """Where (see location) and progress counters."""
+    if not settings.hand_inventory:
+        return location(memory, settings)
     return (*location(memory, settings),
             int(memory[at(ITEMS)]), int(memory[at(ENERGY_TANKS)]), int(memory[at(MAX_MISSILES)]) // 5)
 
