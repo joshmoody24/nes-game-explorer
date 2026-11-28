@@ -378,6 +378,8 @@ def main():
                 settings = dataclasses.replace(settings, player_y_screen=settings.player_y_screen or not y_scrolled)
             print(f"player x byte counts on the background: {settings.player_x_scrolled}; y byte on the screen: {settings.player_y_screen}", flush=True)
         print(f"player bytes (by contingency): {settings.player_bytes}", flush=True)
+    if settings.milestones and not settings.reference_state:
+        settings = dataclasses.replace(settings, reference_state=args.start_state or "")
     if settings.place_extras:
         share = np.load("cache/poke_share.npy") if settings.byte_picker == "poke" else None
         learned = place_extras.pick(emulator, start, np.random.default_rng(args.seed), settings, share)

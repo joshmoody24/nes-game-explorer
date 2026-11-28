@@ -1507,3 +1507,13 @@ the state-level danger prediction to choose which states to keep and explore fro
   7/8 at median 0.63M (hand 8/8 at 0.72M; world-levels 4/8). Now detected per byte (y_is_scrolled: does the sprite
   nearest the player's screen x line up with the raw y byte or y - scroll?): picks screen y at ridley-exit and
   power-on. Final 16-seed run on 4 walls: hand vs world-yscreen vs world-auto.
+- **Generic places ahead of hand places (8 seeds, 4 walls, first batch):** world-auto (levels-coarse + 50-step tries +
+  player-world, height convention detected per byte) 23/32 walls vs hand 18/32: +0.62 walls/seed (+0.00 to +1.12),
+  +0.7 cells/run. lava 8/8 vs 3/8, ridley-door 8/8 at 0.38M vs 7/8 at 0.66M, ridley-exit 7/8 at 0.63M vs 8/8 at 0.72M,
+  first-shaft 0 vs 0. Auto-detection reproduces the forced setting exactly. Seeds 9-16 running.
+- **First-shaft blocker = the Morph Ball is thrown away.** The way into column 10 is a low tunnel rolled through in ball
+  form. Hand places got the Morph Ball at save 114 and half their saves hold it (362/722; 24 ball-form saves); generic
+  got it at save 1,522 and kept 17 such saves, 0 in ball form. Hand places include the items byte, so a pickup makes
+  every place new; generic places don't, so saves with the item land on old places and are dropped. (The "no
+  inventory" diagnostic missed this: nothing is picked up on those walls.) New --milestones: number of rarely
+  changing bytes now differing from the run's start, part of the place.
