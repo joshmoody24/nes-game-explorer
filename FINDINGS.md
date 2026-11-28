@@ -1438,3 +1438,10 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Column-11 aliasing check:** 1,335 of 1,770 finest blocks hold 2+ map cells, but 1,150 are neighbouring cells
   (Metroid changes map cell where Samus crosses, not at camera screen edges: a referee artifact); 161 (9%) hold far-apart
   cells in one area = real path-dependent drift of about a screen. Stitching didn't fix the column-11 gap.
+- **Every grid shape at once doesn't help** (8 seeds vs hand, 4 walls): union7 (7 grids from both best schemes) 14/32,
+  union8 (+ a hand-like 256x32 grid) 14/32 (lava 4/8 > hand 3/8 but ridley-exit 3/8), levels-coarse 17/32, hand 18/32.
+  All generic schemes reach fewer map cells than hand (-2.8 to -6.0, mostly column 11).
+- **Levels tweaks** (4 seeds vs levels-coarse, ridley-exit + column-11): 2 player bytes per direction -3.8 cells/run,
+  + poke bytes -4.9 cells/run. Adding detail to places keeps hurting.
+- **--pixel-scroll:** dead reckoning from frame-to-frame background shifts; ~3.4x slower per frame in Python (5.6K vs
+  19.3K frames/s). Testing whether better vertical tracking closes the column-11 gap.
