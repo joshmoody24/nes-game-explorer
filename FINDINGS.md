@@ -1477,3 +1477,7 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Coarse bias rejected for ridley-exit** (8 seeds vs hand): G50 7/8 exit, b2 4/8, b4 2/8, b4+pp 3/8 (walls -0.38,
   -0.88, -0.88). The fine levels do the useful work at the climb; the hypothesis that they waste tries was wrong.
   Trying a fine bias (b=0.5, 0.25).
+- **Fine bias doesn't help either** (8 seeds): b=0.5 and b=0.25 both 4/8 ridley-exit. G50's 7/8 on seeds 1-8 was luck
+  (9/16 over 16 seeds, 2/8 on seeds 9-16): generic's true ridley-exit rate is ~50-60% vs hand ~94%, whatever the bias.
+  Stopped knob-turning. Next: a fair head-to-head from power-on (no hand-picked walls or start saves), hand vs generic
+  (levels-coarse, 50-step tries), 7 workers each, 40 minutes.
