@@ -49,3 +49,19 @@ def player_bytes(emulator, start_state, rng, turbo, per_axis=2, count=150):
         ranked = [int(b) for b in np.argsort(-scores(emulator, saves, press, opposite)) if int(b) not in chosen]
         chosen += ranked[:per_axis]
     return chosen
+
+
+def x_is_scrolled(emulator, saves, x_byte):
+    """Whether the player's x byte counts on the background (screen x = byte - scroll x) rather than on screen: whichever
+    reading has a visible sprite within 8 pixels in more of the saves."""
+    hits = {False: 0, True: 0}
+    for state in saves:
+        sprites = np.frombuffer(emulator.block(state, "SPRT"), np.uint8).reshape(64, 4)
+        sprites = sprites[sprites[:, 0] < 0xEF]
+        if not len(sprites):
+            continue
+        value, scroll_x = int(emulator.view(state)[x_byte]), emulator.scroll(state)[0]
+        for scrolled in hits:
+            target = (value - scroll_x) % 256 if scrolled else value
+            hits[scrolled] += int(np.abs(sprites[:, 3].astype(int) - target).min() <= 8)
+    return hits[True] > hits[False]

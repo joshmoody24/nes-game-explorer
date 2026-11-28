@@ -64,6 +64,10 @@ class Settings:
     # memory() indices of the player's position, comma-separated; go_explore fills it in (see contingency.py).
     player_bytes: str = ""
     player_per_axis: int = 2  # how many controller-driven bytes per direction contingency picks (copies add places)
+    # Height from the player's sprite instead of the up-down byte: the visible hardware sprite nearest the player's x
+    # byte gives y. The jump test that finds the up-down byte is weak (a jump comes back down); left-right is strong.
+    player_y_sprite: bool = False
+    player_x_scrolled: bool = False  # the x byte counts on the background, so screen x = x byte - scroll x (go_explore checks)
     # Experimental add-ons to scroll places, comma-separated (see place_extras.py), and what they learned at run start.
     place_extras: str = ""
     byte_picker: str = "sticky"
@@ -142,9 +146,21 @@ def player_step(settings):
     return int(parts[1]) if len(parts) > 1 else 0
 
 
-def player_part(memory, settings):
+def player_values(emulator, state, memory, settings):
+    """The player's position values: the player bytes, or with player_y_sprite (x byte, y of the nearest sprite)."""
+    values = [int(memory[int(b)]) for b in settings.player_bytes.split(",") if b]
+    if settings.player_y_sprite and values:
+        sprites = np.frombuffer(emulator.block(state, "SPRT"), np.uint8).reshape(64, 4)
+        sprites = sprites[sprites[:, 0] < 0xEF]
+        screen_x = (values[0] - emulator.scroll(state)[0]) % 256 if settings.player_x_scrolled else values[0]
+        height = int(sprites[np.abs(sprites[:, 3].astype(int) - screen_x).argmin(), 0]) if len(sprites) else 0
+        values = [values[0], height]
+    return tuple(values)
+
+
+def player_part(values, settings):
     step = player_step(settings)
-    return tuple(int(memory[int(b)]) // step for b in settings.player_bytes.split(",") if b) if step else ()
+    return tuple(v // step for v in values) if step else ()
 
 
 def travelled(start_place, scroll, settings):
@@ -179,7 +195,7 @@ def place_of_state(emulator, state, settings):
     """The place of a stored state with no history; a screen scheme draws one more frame from it to see the picture."""
     if settings.place_scheme.startswith("scroll:"):
         extras = Extras(emulator, settings, Path(settings.reference_state).read_bytes() if settings.reference_state else state)
-        return (scroll_place(emulator.scroll(state), settings) + player_part(emulator.view(state), settings)
+        return (scroll_place(emulator.scroll(state), settings) + player_part(player_values(emulator, state, emulator.view(state), settings), settings)
                 + extras.part(state, emulator.view(state), extras.start(("start",))))
     if not uses_picture(settings):
         return hand_made_place(emulator.view(state), settings)
@@ -271,8 +287,8 @@ SPLIT_LEVELS = 4  # a split place's block is the scheme's block times 1, 2, 4 or
 _crowding = {}  # per worker process: steps landed in each split cell (level, coordinates), for Settings.place_split
 
 
-def split_cell(position, memory, settings, level):
-    player = tuple(int(memory[int(b)]) // (player_step(settings) << level) for b in settings.player_bytes.split(",") if b)
+def split_cell(position, values, settings, level):
+    player = tuple(v // (player_step(settings) << level) for v in values)
     return ("split", level) + tuple(p // (scroll_block(settings) << level) for p in position) + player
 
 
@@ -282,12 +298,12 @@ def ancestors(place, extra):
     return [(level + up,) + tuple(c >> up for c in cell) for up in range(SPLIT_LEVELS - level)]
 
 
-def split_place(position, memory, settings, crowding):
+def split_place(position, values, settings, crowding):
     """The finest cell, coarse to fine, whose parent has earned a split (play landed there Settings.place_split times)."""
     level = SPLIT_LEVELS - 1
-    while level > 0 and crowding.get(split_cell(position, memory, settings, level)[1:], 0) >= settings.place_split:
+    while level > 0 and crowding.get(split_cell(position, values, settings, level)[1:], 0) >= settings.place_split:
         level -= 1
-    return split_cell(position, memory, settings, level)
+    return split_cell(position, values, settings, level)
 
 
 def nearest_center(feature, centers, radius):
@@ -355,18 +371,19 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                 position = stitched(position, scroll, emulator.nametable(state), scroll_block(settings))
             probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
             extra = _extras(emulator, settings).part(state, memory, carry, probe_block, position)
-            place = scroll_place(position, settings) + player_part(memory, settings) + extra
+            values = player_values(emulator, state, memory, settings)
+            place = scroll_place(position, settings) + player_part(values, settings) + extra
             if settings.place_groups:
                 block = tuple(p // 32 for p in position)
                 saw_move(last_block, block)
                 last_block = block
-                place = ("group", group(block)) + player_part(memory, settings) + extra
+                place = ("group", group(block)) + player_part(values, settings) + extra
             if settings.place_split:
-                place = split_place(position, memory, settings, _crowding) + extra
+                place = split_place(position, values, settings, _crowding) + extra
                 for ancestor in ancestors(place, extra):
                     _crowding[ancestor] = _crowding.get(ancestor, 0) + 1
             if settings.place_radius:
-                feature = np.array(tuple(position) + tuple(int(memory[int(b)]) for b in settings.player_bytes.split(",") if b), np.int64)
+                feature = np.array(tuple(position) + values, np.int64)
                 nearest = nearest_center(feature, centers, settings.place_radius)
                 if nearest is None:
                     keys.append(("radius",) + tuple(int(v) for v in feature))
@@ -374,7 +391,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     nearest = len(keys) - 1
                 place = keys[nearest] + extra
             levels = [("level", level) + tuple(p // (scroll_block(settings) << level) for p in position)
-                      + tuple(v // (player_step(settings) << (level if settings.level_player else 0)) for v in (int(memory[int(b)]) for b in settings.player_bytes.split(",") if b))
+                      + tuple(v // (player_step(settings) << (level if settings.level_player else 0)) for v in values)
                       + extra for level in range(settings.place_levels)] if settings.place_levels > 1 else [place]
         elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
