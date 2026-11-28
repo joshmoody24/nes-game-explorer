@@ -1406,3 +1406,8 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Search re-tests on hand places** (paired, ridley-door + ridley-exit): at 4 seeds all looked >= hand, at 12 seeds
   hand 23/24, fertility 20/24 (-0.25, -0.58 to 0.00), scenery recency 20/24 (-0.25, -0.67 to +0.17); descendants
   level at 4 seeds. No sign of gain; the old rejections stand in spirit (intervals still touch 0, so not "worse").
+- **Ridley-exit diagnosis** (one run each, seed 2): hand kept 1,083 saves, tried (24,25) 82x and (23,25) 16x, reached
+  Norfair; scroll:8,32 kept 10,423 saves (~10x), tried (24,25) 410x but (23,25) once, never left. Same failure as the
+  lava corridor: generic places ~10x too fine. Next: screen-sized dead-reckoning blocks (256/128/64 px) + player
+  bytes in 32 px steps, the generic mirror of hand places (screen + position on it); possible now that saves carry
+  exact positions.
