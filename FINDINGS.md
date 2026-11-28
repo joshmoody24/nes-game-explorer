@@ -1432,3 +1432,9 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Coarser level floor doesn't help** (8 seeds vs hand, +column-11): lv16-32 15/32 walls (-0.38) but -3.9 map
   cells/run (-7.4 to -0.9); lv32 11/32 (-0.88); lv32-fix 8/32 (-1.25). The finest level is meant to be finer than hand
   places; dropping it loses ground (mostly column 11).
+- **Sprite height rejected** (8 seeds vs hand, 4 walls): coarse-sprite 4/32 walls (-1.75, -2.38 to -1.25), wide-sprite
+  3/32, wide-sprite16 6/32; ridley-door 0-3/8 where every byte-based scheme passes. The nearest sprite flips between
+  Samus, shots and enemies, so the height is noise.
+- **Column-11 aliasing check:** 1,335 of 1,770 finest blocks hold 2+ map cells, but 1,150 are neighbouring cells
+  (Metroid changes map cell where Samus crosses, not at camera screen edges: a referee artifact); 161 (9%) hold far-apart
+  cells in one area = real path-dependent drift of about a screen. Stitching didn't fix the column-11 gap.
