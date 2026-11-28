@@ -323,6 +323,7 @@ WARMUP_STEPS = 2000  # steps a worker watches before it trusts its change rates
 _change_counts, _steps_watched = None, 0  # per worker process: how often each memory byte changed
 _milestone_bytes, _milestone_values, _not_milestones = set(), {}, set()  # per worker process (Settings.milestones)
 MILESTONE_VALUES = 3  # a byte taking more values than this is a counter or a state, not inventory
+MILESTONE_RATE = 1e-4  # inventory changes far more rarely than doors or enemy states (which change in every room)
 _reference_memory = None
 _records = {}  # per worker process: (room, byte) -> (lowest, highest, went down, went up, records), for novel_values
 PROGRESS_RECORDS = 3  # one-way records a byte must set in a room before its records count (junk bytes stop sooner)
@@ -473,7 +474,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             if settings.milestones:
                 # Inventory-like bytes only: rare, never seen back at their start value, few distinct values.
                 for b, value in rare_values:
-                    if b in _not_milestones:
+                    if b in _not_milestones or _change_counts[b] > MILESTONE_RATE * _steps_watched + 1:
                         continue
                     seen = _milestone_values.setdefault(b, set())
                     seen.add(value)
