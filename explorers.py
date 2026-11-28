@@ -85,6 +85,11 @@ class Settings:
     # brightness profiles against the last frame's to see how the background moved (98% exact vs the hardware in
     # checks/pixel_scroll_check.py). A step whose best match is poor counts as a cut (no travel).
     pixel_scroll: bool = False
+    # Record places (novel_values) group by the screen-sized dead-reckoning block instead of the place itself.
+    screen_rooms: bool = False
+    # One measurement per axis: place position = the player's world position (dead-reckoned camera + the player's offset
+    # on screen), with no separate player part, so the camera and a player byte never count the same move twice.
+    player_world: bool = False
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
@@ -182,6 +187,14 @@ def player_values(emulator, state, memory, settings):
         height = int(sprites[np.abs(sprites[:, 3].astype(int) - screen_x).argmin(), 0]) if len(sprites) else 0
         values = [values[0], height]
     return tuple(values)
+
+
+def world_position(camera, scroll, memory, settings):
+    """The player's position in the world: the dead-reckoned camera plus where the player is on screen."""
+    on_screen = [int(memory[int(b)]) for b in settings.player_bytes.split(",") if b][:2]
+    if settings.player_x_scrolled:
+        on_screen = [(v - s) % r for v, s, r in zip(on_screen, scroll, (256, 240))]
+    return tuple(c + o for c, o in zip(camera, on_screen + [0] * (2 - len(on_screen))))
 
 
 def player_part(values, settings):
@@ -413,7 +426,11 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
             extra = _extras(emulator, settings).part(state, memory, carry, probe_block, position)
             values = player_values(emulator, state, memory, settings)
-            place = scroll_place(position, settings) + player_part(values, settings) + extra
+            if settings.player_world:
+                values, at = (), world_position(position, emulator.scroll(state), memory, settings)
+            else:
+                at = position
+            place = scroll_place(at, settings) + player_part(values, settings) + extra
             if settings.place_groups:
                 block = tuple(p // 32 for p in position)
                 saw_move(last_block, block)
@@ -431,7 +448,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
                     centers = np.vstack([centers, feature])
                     nearest = len(keys) - 1
                 place = keys[nearest] + extra
-            levels = [("level", level) + tuple(p // block for p in position) + tuple(v // step for v in values) + extra
+            levels = [("level", level) + tuple(p // block for p in at) + tuple(v // step for v in values) + extra
                       for level, (block, step) in enumerate(grids(settings))] if len(grids(settings)) > 1 else [place]
         elif uses_picture(settings):
             place, history = screen_place(history, emulator.gray(), settings)
@@ -454,7 +471,9 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             if settings.stale_steps is not None and stale >= settings.stale_steps:
                 break
         if settings.novel_values:
-            room = room_of(place)
+            # Records need a room-sized grouping to pile up (PROGRESS_RECORDS one-way records per room). For dead-reckoning
+            # places that's the screen-sized block of the position, not the (much finer) place itself.
+            room = ("screen",) + tuple(p // 256 for p in position) if scrolling and settings.screen_rooms else room_of(place)
             for b, value in rare_values:
                 low, high, went_down, went_up, count = _records.get((room, b), (value, value, False, False, 0))
                 record = value < low or value > high

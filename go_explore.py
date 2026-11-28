@@ -58,6 +58,7 @@ class Archive:
     index: dict = field(default_factory=dict)  # place -> positions of its visits in the lists above
     place_numbers: dict = field(default_factory=dict)  # place -> a small number, for counting visits per place
     place_of: list = field(default_factory=list)  # each visit's place_numbers entry, kept as visits are added
+    room_first: bool = False  # attention split evenly over rooms (screen-sized dead-reckoning blocks) before places
     coarse_bias: float = 1.0  # with grid levels: level L's share of attention is proportional to this ** L
     place_productivity: float = 0.0  # like productivity, but each place's rate pooled over its saves
     productivity: float = 0.0  # weight saves by ((1 + saves their tries created) / (1 + times chosen)) ** this
@@ -155,6 +156,16 @@ class Archive:
         if self.productivity:
             # Hill-climb what pays off: a save whose tries keep creating new saves stays hot; one tried often for nothing cools.
             weights = weights * ((1 + np.array(self.children)) / (1 + np.array(self.times_chosen))) ** self.productivity
+        if self.room_first and any(p is not None for p in self.positions):
+            # Room-first attention: every room (screen-sized block of the dead-reckoned position) gets an equal share, split
+            # over its places, so a room with many places doesn't outvote a fresh room with a few.
+            rooms = {}
+            room_of_place = np.zeros(len(visits_per_place), np.int64)
+            for visit, number in enumerate(self.place_of):
+                position = self.positions[visit]
+                room_of_place[number] = rooms.setdefault(tuple(p // 256 for p in position) if position is not None else ("none",), len(rooms))
+            places_in_room = np.bincount(room_of_place, minlength=len(rooms))
+            weights = weights / places_in_room[room_of_place[place_of]]
         if self.place_productivity:
             # The same, pooled per place: with many saves per place, one save's own record is too few tries to mean much.
             made = np.bincount(place_of, weights=np.array(self.children), minlength=len(visits_per_place))
@@ -260,6 +271,7 @@ def parse_arguments():
     parser.add_argument("--stop-when", help="a bench.py wall name: stop as soon as a new save passes that wall's success test")
     parser.add_argument("--descendants", type=float, default=0.0, help="weight visits by (1 + saves descended from them) ** this; 0 is off")
     parser.add_argument("--scenery-recency", type=float, default=0.0, help="weight visits by 1 / (1 + generations since their scenery changed) ** this; 0 is off")
+    parser.add_argument("--room-first", action="store_true", help="split attention evenly over rooms first, then over places in each room")
     parser.add_argument("--coarse-bias", type=float, default=1.0, help="with grid levels: level L gets attention in proportion to this ** L (1 = equal)")
     parser.add_argument("--place-productivity", type=float, default=0.0, help="weight places by their saves' pooled rate of creating new saves ** this")
     parser.add_argument("--productivity", type=float, default=0.0, help="weight saves by their rate of creating new saves ** this; 0 is off")
@@ -358,7 +370,7 @@ def main():
     if player_step(settings) and not settings.player_bytes:
         found = player_bytes(emulator, start, np.random.default_rng(args.seed), settings.turbo, settings.player_per_axis)
         settings = dataclasses.replace(settings, player_bytes=",".join(map(str, found)))
-        if settings.player_y_sprite:
+        if settings.player_y_sprite or settings.player_world:
             saves = varied_saves(emulator, start, np.random.default_rng(args.seed + 1), 60, settings.turbo)
             settings = dataclasses.replace(settings, player_x_scrolled=x_is_scrolled(emulator, saves, found[0]))
             print(f"player x byte counts on the background: {settings.player_x_scrolled}", flush=True)
@@ -381,6 +393,7 @@ def main():
     archive.productivity = args.productivity
     archive.place_productivity = args.place_productivity
     archive.coarse_bias = args.coarse_bias
+    archive.room_first = args.room_first
     archive.descendant_weight = args.descendants
     archive.scenery_recency = args.scenery_recency
     if args.skip_worn and archive.familiar:
