@@ -1381,3 +1381,13 @@ the state-level danger prediction to choose which states to keep and explore fro
   15 seeds per wall above: never better than one full run beyond noise (lava hand 3.5M at c=2M vs 11.1M at 0.75M;
   ridley-exit 0.91M vs 1.39M at 0.5M; ridley-door 0.67M vs 0.62M best). Time-to-pass isn't heavy-tailed; runs build on
   their own archive.
+- **Round 1 add-ons, batch 1** (15 seeds, vs scroll:8,32): poke +0.07 (-0.33 to +0.47; ridley-exit median 0.97M vs
+  1.61M), area 0.00, burst -0.07, fuzzy -0.40, sticky -0.47, cast -0.47, cuts -0.80 (-1.13 to -0.40), patch -0.87
+  (-1.20 to -0.53). No generic scheme breaks the lava corridor (hand 7/15).
+- **Round 1 was OOM-killed at its 24G group cap** after 2.5 h (one exploding run took all 15). compare.py now caps each
+  run (1.5G; a killed run counts as not breaking the wall). The watcher only woke on summaries, so it sat dead an
+  hour: watchers now also wake on no process / 15 min without a finished run (Josh: check work, don't wait).
+- **Why hand wins the lava corridor:** not inventory (hand without items/tanks/missiles: identical 7/15), not block
+  size alone (scroll:32,32 0/15, scroll:8,32 1/15). One run each: hand kept 1,077 saves over 20 map cells and went
+  down the shaft at column 24 into Ridley's area; scroll:8,32 kept 6,171 saves in 5 corridor cells (~1,500 per cell
+  vs ~100) and never reached column 24. Too fine again: the 4 contingency bytes multiply with the 8 px blocks.
