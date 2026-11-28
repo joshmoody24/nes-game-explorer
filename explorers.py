@@ -81,6 +81,10 @@ class Settings:
     # Every grid shape at once: "B1xP1,B2xP2,..." files each save under every listed grid (scroll block B px, player
     # step P px), attention shared evenly across grids like place_levels. Overrides place_levels when set.
     place_grids: str = ""
+    # Dead reckoning from pixels instead of the NES scroll registers: each step, slide this frame's row and column
+    # brightness profiles against the last frame's to see how the background moved (98% exact vs the hardware in
+    # checks/pixel_scroll_check.py). A step whose best match is poor counts as a cut (no travel).
+    pixel_scroll: bool = False
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
@@ -133,7 +137,26 @@ def screen_place(history, gray, settings):
 
 
 def uses_picture(settings):
-    return settings.place_scheme.startswith("screen:")
+    return settings.place_scheme.startswith("screen:") or settings.pixel_scroll
+
+
+PIXEL_SHIFT_MOST, STATUS_ROWS, POOR_MATCH = 16, 40, 0.5  # status bars usually sit in the top rows; they don't scroll
+
+
+def profile_shift(a, b):
+    """(shift in pixels that best lines up profile b with profile a, how poor that best match is: 0 perfect, 1 none)."""
+    a, b = a - a.mean(), b - b.mean()
+    errors = [np.mean((a[max(0, d):len(a) + min(0, d)] - b[max(0, -d):len(b) + min(0, -d)]) ** 2)
+              for d in range(-PIXEL_SHIFT_MOST, PIXEL_SHIFT_MOST + 1)]
+    best = int(np.argmin(errors))
+    return best - PIXEL_SHIFT_MOST, errors[best] / max(np.mean(a ** 2) + np.mean(b ** 2), 1e-9)
+
+
+def pixel_move(previous_gray, gray):
+    """How far the background moved between two frames (x, y), or (0, 0) for a cut (no good match)."""
+    old, new = previous_gray[STATUS_ROWS:], gray[STATUS_ROWS:]
+    (dx, poor_x), (dy, poor_y) = profile_shift(old.mean(axis=0), new.mean(axis=0)), profile_shift(old.mean(axis=1), new.mean(axis=1))
+    return (0, 0) if max(poor_x, poor_y) > POOR_MATCH else (dx, dy)
 
 
 SCROLL_RANGE = (512, 480)  # the picture chip scrolls over two name tables each way: 2 x 256 wide, 2 x 240 tall
@@ -349,6 +372,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             centers = np.array([k[1:] for k in keys], np.int64).reshape(len(keys), width)
         carry = _extras(emulator, settings).start(start_place)
         last_block = tuple(p // 32 for p in position)
+        previous_gray = None
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
@@ -375,9 +399,15 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             died = True
             break
         if scrolling:
+            if settings.pixel_scroll:
+                gray = emulator.gray(1)
+                move = pixel_move(previous_gray, gray) if previous_gray is not None else (0, 0)
+                position, previous_gray = tuple(p + m for p, m in zip(position, move)), gray
             scroll = emulator.scroll(state)
             jump = settings.stitch and any(min(abs(a - b), r - abs(a - b)) > CUT for a, b, r in zip(previous_scroll, scroll, SCROLL_RANGE))
-            position, previous_scroll = moved(position, previous_scroll, scroll, scroll_block(settings)), scroll
+            if not settings.pixel_scroll:
+                position = moved(position, previous_scroll, scroll, scroll_block(settings))
+            previous_scroll = scroll
             if jump:
                 position = stitched(position, scroll, emulator.nametable(state), scroll_block(settings))
             probe_block = tuple(p // 32 for p in position)  # probe add-ons rerun only when this coarse block changes
