@@ -254,7 +254,7 @@ class Segment:
 def holdings(memory, settings):
     """What a state holds of each hoarded byte (see keep_more), divided by its scale."""
     return tuple(int(memory[int(index)]) / float(scale or 1)
-                 for index, _, scale in (item.partition(":") for item in settings.keep_more.split(",") if item))
+                 for index, _, scale in (item.partition(":") for item in settings.keep_more.split(",") if item and item != "none"))
 
 
 def beats(a, b):
