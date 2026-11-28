@@ -220,7 +220,7 @@ def resumed_archive(run_name, settings, emulator, first=0):
     for state, place, path in list(zip(saved["states"], places, paths))[first:]:
         memory = emulator.view(state)
         # Record, screen and scroll places are kept as stored: their history (cells, distance travelled) isn't in the state.
-        archive.offer(place if place is not None and place[0] in ("record", "screen", "scroll", "level", "radius", "split", "group") else place_of_state(emulator, state, settings),
+        archive.offer(place if place is not None and place[0] in ("record", "screen", "scroll", "level", "radius", "split", "group", "compass") else place_of_state(emulator, state, settings),
                       state, holdings(memory, settings), path=path)
     return archive
 
@@ -370,7 +370,7 @@ def main():
     if player_step(settings) and not settings.player_bytes:
         found = player_bytes(emulator, start, np.random.default_rng(args.seed), settings.turbo, settings.player_per_axis)
         settings = dataclasses.replace(settings, player_bytes=",".join(map(str, found)))
-        if settings.player_y_sprite or settings.player_world:
+        if settings.player_y_sprite or settings.player_world or settings.compass:
             saves = varied_saves(emulator, start, np.random.default_rng(args.seed + 1), 60, settings.turbo)
             settings = dataclasses.replace(settings, player_x_scrolled=x_is_scrolled(emulator, saves, found[0]))
             print(f"player x byte counts on the background: {settings.player_x_scrolled}", flush=True)

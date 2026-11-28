@@ -90,6 +90,9 @@ class Settings:
     # One measurement per axis: place position = the player's world position (dead-reckoned camera + the player's offset
     # on screen), with no separate player part, so the camera and a player byte never count the same move twice.
     player_world: bool = False
+    # Compass champions: each room (screen-sized block of the player's world position) has 8 places, one per compass
+    # direction; a save's holding there is how far it got that way, so the keep rule keeps the one that went furthest.
+    compass: bool = False
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
@@ -189,6 +192,9 @@ def player_values(emulator, state, memory, settings):
     return tuple(values)
 
 
+COMPASS = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0)]
+
+
 def world_position(camera, scroll, memory, settings):
     """The player's position in the world: the dead-reckoned camera plus where the player is on screen."""
     on_screen = [int(memory[int(b)]) for b in settings.player_bytes.split(",") if b][:2]
@@ -247,6 +253,8 @@ def room_of(place):
     """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
     if place[0] == "record":
         return place[1]
+    if place[0] == "compass":
+        return place[:3]
     return place if place[0] in ("screen", "scroll", "level", "radius", "split", "group") else tuple(place[:3])
 
 
@@ -457,12 +465,17 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         place += (zlib.crc32(emulator.nametable(state)),) if settings.place_nametable else ()
         length = start_path_length + step + 1
         held = holdings(memory, settings)
+        offers = [(offered, held) for offered in (levels if scrolling else [place])]
+        if scrolling and settings.compass:
+            world = world_position(position, emulator.scroll(state), memory, settings)
+            room = tuple(w // 256 for w in world)
+            offers = [(("compass",) + room + (d,), held + (dx * world[0] + dy * world[1],)) for d, (dx, dy) in enumerate(COMPASS)]
         new = False
-        for offered in (levels if scrolling else [place]):
+        for offered, offered_held in offers:
             new = new or (offered not in known and offered not in found)
             rivals = known.get(offered, []) + ([(found[offered][2], found[offered][1])] if offered in found else [])
-            if not any(beats(rival, (held, length)) for rival in rivals):
-                found[offered] = (state, length, held, tuple(position) if scrolling else None)
+            if not any(beats(rival, (offered_held, length)) for rival in rivals):
+                found[offered] = (state, length, offered_held, tuple(position) if scrolling else None)
         if new:
             gaps.append(stale + 1)
             stale = 0
