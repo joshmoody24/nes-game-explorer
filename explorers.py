@@ -93,6 +93,9 @@ class Settings:
     # Compass champions: each room (screen-sized block of the player's world position) has 8 places, one per compass
     # direction; a save's holding there is how far it got that way, so the keep rule keeps the one that went furthest.
     compass: bool = False
+    # Drunkard's ruler: each room's cell size per axis is how far tries started there typically travel along it (median
+    # of the last RULER_TRIES, rounded to a power of two in 8..256 px), on the player's world position.
+    ruler: bool = False
     # Nearest-center places (k-center): >0 makes a place the nearest known center within this many pixels (L-infinity
     # over scroll position and player bytes), else the save starts a new center. No grid, so no cell edges.
     place_radius: int = 0
@@ -192,6 +195,25 @@ def player_values(emulator, state, memory, settings):
     return tuple(values)
 
 
+RULER_TRIES, RULER_SIZES = 50, (8, 256)
+_ruler = {}  # per worker process: room -> recent (|dx|, |dy|) of tries started in it
+
+
+def ruler_size(room):
+    """(x size, y size) of this room's cells: a power of two near the typical travel of a try started in it."""
+    moves = _ruler.get(room)
+    if not moves:
+        return (32, 32)
+    typical = np.median(np.array(moves), axis=0)
+    return tuple(int(min(max(2 ** round(np.log2(max(t, 1))), RULER_SIZES[0]), RULER_SIZES[1])) for t in typical)
+
+
+def ruler_place(world):
+    room = tuple(w // 256 for w in world)
+    size = ruler_size(room)
+    return ("ruler",) + room + tuple(w // s for w, s in zip(world, size)) + size
+
+
 COMPASS = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0)]
 
 
@@ -253,7 +275,7 @@ def room_of(place):
     """The coarse part of a place: what record places (novel_values) and layer rules count as one room."""
     if place[0] == "record":
         return place[1]
-    if place[0] == "compass":
+    if place[0] in ("compass", "ruler"):
         return place[:3]
     return place if place[0] in ("screen", "scroll", "level", "radius", "split", "group") else tuple(place[:3])
 
@@ -394,6 +416,7 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         carry = _extras(emulator, settings).start(start_place)
         last_block = tuple(p // 32 for p in position)
         previous_gray = None
+    start_world = None
     pressed = bytearray()
     repeat_probability = settings.repeat_probability - rng.random() * settings.repeat_spread
     for step in range(settings.steps_per_segment):
@@ -466,6 +489,11 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
         length = start_path_length + step + 1
         held = holdings(memory, settings)
         offers = [(offered, held) for offered in (levels if scrolling else [place])]
+        if scrolling and settings.ruler:
+            world = world_position(position, emulator.scroll(state), memory, settings)
+            if start_world is None:
+                start_world = world
+            offers = [(ruler_place(world) + extra, held)]
         if scrolling and settings.compass:
             world = world_position(position, emulator.scroll(state), memory, settings)
             room = tuple(w // 256 for w in world)
@@ -504,6 +532,11 @@ def explore(emulator, rng, settings, known, start, start_state, start_path_lengt
             rare_values = []
         if step % PROGRESS_SAMPLE_EVERY == 0:
             progress.see(emulator.memory(state), emulator.nametable(state))
+    if scrolling and settings.ruler and start_world is not None:
+        end_world = world_position(position, emulator.scroll(state), memory, settings)
+        moves = _ruler.setdefault(tuple(w // 256 for w in start_world), [])
+        moves.append(tuple(abs(e - s) for e, s in zip(end_world, start_world)))
+        del moves[:-RULER_TRIES]
     probe_frames = carry["probe_frames"] if scrolling else 0  # probes are play too: they count toward the budget
     return Segment(start, found, progress, (step + 1) * FRAMES_PER_STEP + probe_frames, gaps, bytes(pressed), zlib.crc32(start_state),
                    died)
