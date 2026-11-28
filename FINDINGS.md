@@ -1464,3 +1464,6 @@ the state-level danger prediction to choose which states to keep and explore fro
   flip the comparison (help generic +1, cost hand -2): finer places see novelty more often, so long random tries wander
   past it. Most knobs hurt generic more than hand: generic places are more fragile. Productivity per save is noisy with
   10x more saves; per coarse place may work better.
+- **Per-place productivity** (Josh's hill-climbing idea, rate pooled per place; laptop, 4 seeds, 3 walls of 12): hand
+  8, hand+pp 9 (+0.4 cells), G50 (levels-coarse, 50-step tries) 9, G50+pp 7 but +1.9 map cells/run (-0.9 to +4.8), the
+  most ground covered by any scheme so far, while ridley-exit drops to 1/4. Needs more seeds.
