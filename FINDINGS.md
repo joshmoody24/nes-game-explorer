@@ -1502,3 +1502,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   taken from x). Testing --player-y-screen.
 - **Drunkard's ruler rejected** (8 seeds vs hand): ruler 5/32 walls (-1.62, -2.12 to -1.12), -2.1 cells/run; with
   room-first 6/32. A room's cell size shifts as its median moves, re-labelling its saves as new: archive churn.
+- **The shaft weakness was the height convention.** Metroid's x byte counts on the background but its y byte is a
+  screen y; deriving y's convention from x scrambled world height in shafts. --player-y-screen (8 seeds): ridley-exit
+  7/8 at median 0.63M (hand 8/8 at 0.72M; world-levels 4/8). Now detected per byte (y_is_scrolled: does the sprite
+  nearest the player's screen x line up with the raw y byte or y - scroll?): picks screen y at ridley-exit and
+  power-on. Final 16-seed run on 4 walls: hand vs world-yscreen vs world-auto.
