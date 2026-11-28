@@ -1458,3 +1458,9 @@ the state-level danger prediction to choose which states to keep and explore fro
   position is no worse than the game's map cell for breadth). The gap isn't finding the player, dead reckoning or
   inventory -> likely search settings co-tuned with hand places (Josh). Knob screen: keep rule, segment length,
   choice power, record places, and a productivity weight (Josh: hill-climb saves that keep leading somewhere new).
+- **Search knob screen** (8 paired seeds, lava + ridley-door + ridley-exit; walls of 24, hand / generic levels-coarse):
+  defaults 18 / 17; 50-step tries 16 / **18** (= hand, cells +0.1); no record places **19** / 12; productivity weight
+  18 (+0.7 cells) / 12; choice power 1: 17 / 11; one save per place 15 / 11; choice power 0: 14 / 10. Shorter tries
+  flip the comparison (help generic +1, cost hand -2): finer places see novelty more often, so long random tries wander
+  past it. Most knobs hurt generic more than hand: generic places are more fragile. Productivity per save is noisy with
+  10x more saves; per coarse place may work better.
