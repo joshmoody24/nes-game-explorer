@@ -1491,3 +1491,8 @@ the state-level danger prediction to choose which states to keep and explore fro
   --compass (8 places per room keeping the save that went furthest each way). Gravity test for the height byte
   (falls steadily after releasing jump, minus no-jump): Samus y or copies top 3/4 starts, weak scores, no better than
   the jump probe; not wired in.
+- **First generic scheme ahead of hand places** (8 paired seeds; first-shaft + lava + ridley-door + ridley-exit):
+  world-levels = levels-coarse + 50-step tries + --player-world (one measurement per axis) 20/32 walls vs hand 18/32
+  (+0.25, -0.38 to +0.88) and +1.8 map cells/run (+0.7 to +3.1, significant): lava 8/8 vs 3/8, ridley-door 8/8 at
+  0.38M vs 7/8 at 0.66M, ridley-exit 4/8 vs 8/8. Room-first also +1.8 cells but 11/32 walls (explores more, finishes
+  less); compass 9/32; world32 9/32 (+1.9 cells). Confirming world-levels with 16 seeds.
