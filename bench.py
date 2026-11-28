@@ -19,7 +19,7 @@ cell = lambda v: (int(v[MAP_Y]), int(v[MAP_X]))
 SHAFT = {(14, 6), (15, 6), (16, 6), (17, 6), (18, 6), (19, 6), (18, 7), (19, 7), (18, 8)}
 # Each wall's history is the runs before it in the winning chain (later runs that crossed the wall would mark its
 # road as worn out, which a real chain never sees). --familiar keeps only those with the same permanent progress.
-HISTORY = {'kraid-fight': 'honest1,honest2,kh-honest', 'kraid-shaft': 'honest3,honest4,honest5', 'column-11': 'honest3,honest4,honest5,honest6', 'lava-corridor': 'honest3,honest4,honest5,honest6,honest8e', 'ridley-door': 'honest8e,lava-layer2c', 'ridley-fight': 'ridley-door3', 'ridley-exit': 'honest9,honest9b', 'ice-beam': 'honest10e,ice2b', 'tourian-entry': 'honest11,honest11b,honest11c', 'missile-door': 'tourian-armed3', 'zebetites': 'tourian-20m3,mb1', 'mother-brain': 'mb2,mb-cross', 'escape': ''}
+HISTORY = {'kraid-fight': 'honest1,honest2,kh-honest', 'kraid-shaft': 'honest3,honest4,honest5', 'column-11': 'honest3,honest4,honest5,honest6', 'lava-corridor': 'honest3,honest4,honest5,honest6,honest8e', 'ridley-door': 'honest8e,lava-layer2c', 'ridley-fight': 'ridley-door3', 'ridley-exit': 'honest9,honest9b', 'ice-beam': 'honest10e,ice2b', 'tourian-entry': 'honest11,honest11b,honest11c', 'missile-door': 'tourian-armed3', 'zebetites': 'tourian-20m3,mb1', 'mother-brain': 'mb2,mb-cross', 'escape': '', 'first-shaft': ''}
 WALLS = {
     "kraid-fight":    ("cache/kraid-honest-farmed.state", lambda v: v[at(0x687B)] & 3),
     "kraid-shaft":    ("cache/after-kraid-brinstar.state", lambda v: brinstar(v) and cell(v) not in SHAFT and cell(v)[0] <= 14),
@@ -34,6 +34,9 @@ WALLS = {
     "zebetites":      ("cache/mb-rich2.state", lambda v: int(v[0x98]) >= 1),
     "mother-brain":   ("cache/mb-rich3.state", lambda v: int(v[0x98]) == 6),
     "escape":         ("cache/escape-honest.state", lambda v: v[at(0x6883)]),
+    # From the game's start: through the first corridor's door into the first shaft (map column 11). Not a wall a
+    # hand-place chain picked, so it doesn't favor either kind of place.
+    "first-shaft":    ("cache/power-on.state", lambda v: int(v[MAP_X]) == 11),
 }
 
 if __name__ == "__main__":
