@@ -1467,3 +1467,10 @@ the state-level danger prediction to choose which states to keep and explore fro
 - **Per-place productivity** (Josh's hill-climbing idea, rate pooled per place; laptop, 4 seeds, 3 walls of 12): hand
   8, hand+pp 9 (+0.4 cells), G50 (levels-coarse, 50-step tries) 9, G50+pp 7 but +1.9 map cells/run (-0.9 to +4.8), the
   most ground covered by any scheme so far, while ridley-exit drops to 1/4. Needs more seeds.
+- **Shorter tries, 16 seeds** (vs hand, 3 walls of 48): hand 37, hand without records 36, G-seg50 31 (-0.38, -0.94 to
+  +0.12; lava 8/16 > hand 7/16, +0.5 cells), G-seg25 32, Gpix-seg50 32 (ridley-door 16/16). Generic now >= hand on lava
+  and ridley-door and covers as much ground; ridley-exit remains (9-12/16 vs 15/16, ~2x slower).
+- **Ridley-exit diagnosis with G-seg50** (2 seeds each, both pass): generic keeps 10-20x more saves (9.7K-15.5K vs
+  680-760) and needs ~3x the tries at the climb cell (24,25): 303-433 vs 95-163. With equal attention per level, 3/4 of
+  tries go to the fine levels' hundreds of near-duplicate places low in the shaft. New --coarse-bias b: level L's share
+  of attention ~ b**L. Testing b=2, 4 (+ per-place productivity).
